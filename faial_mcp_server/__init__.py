@@ -1,0 +1,1 @@
+﻿"""Faial MCP server package."""
