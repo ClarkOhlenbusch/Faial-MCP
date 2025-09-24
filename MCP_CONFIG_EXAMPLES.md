@@ -4,16 +4,33 @@ This document provides configuration examples for connecting to the hosted Faial
 
 ## 🚀 Quick Start
 
-Once the server is deployed, users just need to add this simple configuration to their MCP client:
+Once the server is deployed (recommended: Railway), users just need to add this simple configuration to their MCP client:
 
 **Important**: The hosted server includes Faial CLI built-in - no local installation required!
 
+### Railway Deployment (Recommended)
+
+Railway automatically builds and deploys the Docker container with Faial CLI pre-installed.
+
+**Why Railway?**
+- ✅ **Container-native**: Perfect for running Faial CLI
+- ✅ **No serverless limitations**: Full file system access
+- ✅ **Easy debugging**: Full container logs
+- ✅ **Automatic deployments**: Connect GitHub repo for auto-deploy
+
+**Railway Setup:**
+1. Sign up at [railway.app](https://railway.app)
+2. Connect your GitHub repository
+3. Railway automatically builds and deploys the container
+4. Get your app URL from Railway dashboard
+
+**MCP Configuration:**
 ```json
 {
   "mcpServers": {
     "faial": {
       "command": "fetch",
-      "args": ["https://your-domain.com/sse"]
+      "args": ["https://your-railway-app.railway.app/sse"]
     }
   }
 }

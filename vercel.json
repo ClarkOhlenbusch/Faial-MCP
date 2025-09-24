@@ -2,39 +2,37 @@
   "version": 2,
   "builds": [
     {
-      "src": "dist/index.js",
-      "use": "@vercel/node"
+      "src": "api/index.js",
+      "use": "@vercel/node",
+      "config": {
+        "maxLambdaSize": "50mb"
+      }
     }
   ],
   "routes": [
     {
       "src": "/health",
-      "dest": "/dist/index.js"
+      "dest": "/api/index.js"
     },
     {
       "src": "/sse",
-      "dest": "/dist/index.js"
+      "dest": "/api/index.js"
     },
     {
       "src": "/messages",
-      "dest": "/dist/index.js"
+      "dest": "/api/index.js"
     },
     {
       "src": "/analyze/(.*)",
-      "dest": "/dist/index.js"
+      "dest": "/api/index.js"
     },
     {
       "src": "/(.*)",
-      "dest": "/dist/index.js"
+      "dest": "/api/index.js"
     }
   ],
   "env": {
     "TRANSPORT_MODE": "http",
     "NODE_ENV": "production"
-  },
-  "functions": {
-    "dist/index.js": {
-      "maxDuration": 300
-    }
   }
 }

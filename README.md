@@ -23,55 +23,73 @@ This lets AI agents (Claude Code, MCP Inspector, etc.) analyze CUDA/C++ codebase
 
 ## Deployment Options
 
-### 🚀 Option 1: Vercel (Recommended)
+### 🚀 Option 1: Railway (Recommended)
 
-1. **Install Vercel CLI**:
+Railway is much better suited for this type of application with external dependencies.
+
+1. **Sign up** at [railway.app](https://railway.app) (free tier available)
+2. **Connect your GitHub repo** to Railway
+3. **Deploy automatically** - Railway will build and run the Docker container
+4. **Faial CLI**: Automatically built and installed during container build
+
+**Why Railway?**
+- ✅ **Container-native**: Perfect for applications needing external binaries
+- ✅ **Automatic deployments**: Push to GitHub, Railway deploys automatically
+- ✅ **Better debugging**: Full container logs and access
+- ✅ **No serverless limits**: Full file system access, no timeout issues
+
+### 🔧 Option 2: Manual Container Deployment
+
+If you prefer more control:
+
+1. **Choose a container host**:
+   - **Railway** (easiest)
+   - **Google Cloud Run**
+   - **AWS ECS**
+   - **Azure Container Instances**
+
+2. **Build and push**:
    ```bash
-   npm install -g vercel
+   docker build -t faial-mcp .
+   docker tag faial-mcp your-registry/faial-mcp
+   docker push your-registry/faial-mcp
    ```
 
-2. **Deploy**:
+3. **Deploy the container** using your chosen platform's interface
+
+### ⚠️ Option 3: Vercel (Serverless - Complex)
+
+Vercel serverless functions have limitations that make them unsuitable for this use case:
+- ❌ Limited file system access
+- ❌ External binary execution issues
+- ❌ Complex debugging
+- ❌ Timeout and memory constraints
+
+**Only use Vercel if you want to keep it serverless** (not recommended for this application).
+
+### 🔑 Key Difference: Vercel vs Container
+
+| Aspect | Vercel Serverless | Container (Railway) |
+|--------|-------------------|---------------------|
+| **Faial CLI** | ❌ Hard to execute binaries | ✅ Full binary support |
+| **Setup Complexity** | ❌ Complex configuration | ✅ Simple deployment |
+| **Debugging** | ❌ Limited logs | ✅ Full container logs |
+| **File System** | ❌ Limited access | ✅ Full file system |
+| **Reliability** | ❌ Prone to crashes | ✅ Stable execution |
+
+### 🐳 Option 3: Traditional Hosting
+
+If you prefer more control:
+
+1. **Deploy to VPS** (DigitalOcean, AWS EC2, etc.)
+2. **Use PM2** for process management:
    ```bash
-   # Deploy to Vercel
-   ./deploy.sh
-
-   # Or manually:
-   npm run build
-   vercel --prod
+   npm install -g pm2
+   pm2 start dist/index.js --name faial-mcp
+   pm2 startup
+   pm2 save
    ```
-
-3. **Faial CLI**: The Dockerfile automatically builds and installs Faial CLI from the [GitLab repository](https://gitlab.com/umb-svl/faial). No manual installation needed!
-
-**Important**: After deployment, the Faial CLI is embedded in the container image, so users don't need to install it locally.
-
-### 🐳 Option 2: Docker
-
-1. **Build and run locally**:
-   ```bash
-   docker-compose up --build
-   ```
-
-2. **Deploy to cloud**:
-   - Push to Docker registry
-   - Deploy container to any cloud platform (AWS, GCP, Azure, etc.)
-   - **Faial CLI**: Automatically built from source during container build
-
-### 🔑 Key Difference: Local vs Hosted
-
-| Aspect | Local MCP Server | Hosted MCP Server |
-|--------|------------------|-------------------|
-| **Faial CLI** | Must be installed on host machine | Embedded in container image |
-| **User Setup** | Requires Faial installation + MCP config | Just MCP config |
-| **Environment** | Local development | Cloud deployment |
-| **Dependencies** | Host machine must have Faial | Container has all dependencies |
-| **Portability** | Tied to specific machine | Works anywhere container runs |
-
-### 🌐 Option 3: Other Platforms
-
-Use the provided configuration files:
-- `vercel.json` for Vercel
-- `netlify.toml` for Netlify
-- `Dockerfile` for container platforms
+3. **Set up reverse proxy** (nginx) for production
 
 ### 🔧 Manual Setup
 
