@@ -25,25 +25,50 @@ COPY tsconfig.json ./
 RUN npm run build
 
 # Install Faial CLI
-# TODO: Replace this with actual Faial CLI installation
-# This is a placeholder - you'll need to update based on how Faial CLI is distributed
+# Based on the GitLab repo: https://gitlab.com/umb-svl/faial
 ENV FAIAL_PATH=/usr/local/bin/faial
 
-# Option 1: If Faial CLI is distributed as a binary
-# RUN wget -O /usr/local/bin/faial https://example.com/faial-cli && chmod +x /usr/local/bin/faial
+# Install build dependencies for Faial
+RUN apt-get update && apt-get install -y \
+    git \
+    build-essential \
+    cmake \
+    ninja-build \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
 
-# Option 2: If Faial CLI is distributed via package manager
-# RUN apt-get update && apt-get install -y faial-cli
+# Clone and build Faial from source
+RUN git clone https://gitlab.com/umb-svl/faial.git /tmp/faial && \
+    cd /tmp/faial && \
+    # Check if there's a build script or CMakeLists.txt
+    if [ -f "build.sh" ]; then \
+        chmod +x build.sh && ./build.sh; \
+    elif [ -f "CMakeLists.txt" ]; then \
+        mkdir build && cd build && \
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local && \
+        make -j$(nproc) && \
+        make install; \
+    else \
+        echo "Warning: No recognized build system found in Faial repo"; \
+        echo "Please check the Faial repository for installation instructions"; \
+        echo "and update this Dockerfile accordingly"; \
+    fi && \
+    # Copy binary if it was built in a different location
+    if [ -f "/tmp/faial/build/faial" ]; then \
+        cp /tmp/faial/build/faial /usr/local/bin/faial && chmod +x /usr/local/bin/faial; \
+    elif [ -f "/tmp/faial/faial" ]; then \
+        cp /tmp/faial/faial /usr/local/bin/faial && chmod +x /usr/local/bin/faial; \
+    fi && \
+    # Cleanup
+    rm -rf /tmp/faial
 
-# Option 3: If Faial CLI is available via npm
-# RUN npm install -g faial-cli
+# Alternative: If Faial provides pre-built binaries
+# RUN wget -O /usr/local/bin/faial https://gitlab.com/umb-svl/faial/-/releases/download/v1.0.0/faial-linux-x64 && \
+#     chmod +x /usr/local/bin/faial
 
-# Option 4: If Faial CLI needs to be built from source
-# RUN git clone https://github.com/your-org/faial-cli.git /tmp/faial-cli && \
-#     cd /tmp/faial-cli && \
-#     make && \
-#     cp faial /usr/local/bin/faial && \
-#     rm -rf /tmp/faial-cli
+# Verify Faial installation
+RUN faial --version || echo "Faial may need manual installation steps - check the repository README"
 
 # Create non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app

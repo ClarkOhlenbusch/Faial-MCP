@@ -11,6 +11,9 @@ echo "🚀 Deploying Faial MCP Server..."
 echo "📦 Building application..."
 npm run build
 
+echo "🔧 Installing and building Faial CLI..."
+echo "   This will clone and build Faial from https://gitlab.com/umb-svl/faial"
+
 # Check which platform to deploy to
 if [ -n "$VERCEL_TOKEN" ]; then
     echo "🎯 Deploying to Vercel..."

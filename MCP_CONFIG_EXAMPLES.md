@@ -2,9 +2,11 @@
 
 This document provides configuration examples for connecting to the hosted Faial MCP server from various MCP clients.
 
-## Quick Start
+## 🚀 Quick Start
 
 Once the server is deployed, users just need to add this simple configuration to their MCP client:
+
+**Important**: The hosted server includes Faial CLI built-in - no local installation required!
 
 ```json
 {

@@ -40,7 +40,9 @@ This lets AI agents (Claude Code, MCP Inspector, etc.) analyze CUDA/C++ codebase
    vercel --prod
    ```
 
-3. **Update Faial CLI**: Edit the Dockerfile to install Faial CLI, then redeploy.
+3. **Faial CLI**: The Dockerfile automatically builds and installs Faial CLI from the [GitLab repository](https://gitlab.com/umb-svl/faial). No manual installation needed!
+
+**Important**: After deployment, the Faial CLI is embedded in the container image, so users don't need to install it locally.
 
 ### 🐳 Option 2: Docker
 
@@ -52,6 +54,17 @@ This lets AI agents (Claude Code, MCP Inspector, etc.) analyze CUDA/C++ codebase
 2. **Deploy to cloud**:
    - Push to Docker registry
    - Deploy container to any cloud platform (AWS, GCP, Azure, etc.)
+   - **Faial CLI**: Automatically built from source during container build
+
+### 🔑 Key Difference: Local vs Hosted
+
+| Aspect | Local MCP Server | Hosted MCP Server |
+|--------|------------------|-------------------|
+| **Faial CLI** | Must be installed on host machine | Embedded in container image |
+| **User Setup** | Requires Faial installation + MCP config | Just MCP config |
+| **Environment** | Local development | Cloud deployment |
+| **Dependencies** | Host machine must have Faial | Container has all dependencies |
+| **Portability** | Tied to specific machine | Works anywhere container runs |
 
 ### 🌐 Option 3: Other Platforms
 
@@ -165,6 +178,32 @@ Outputs prefer JSON (when Faial supports `--format json`), falling back to plain
 ## User Configuration
 
 See [MCP_CONFIG_EXAMPLES.md](MCP_CONFIG_EXAMPLES.md) for detailed configuration examples for various MCP clients.
+
+## 🔧 Faial Installation Notes
+
+The hosted MCP server builds Faial CLI from source during the Docker build process:
+
+1. **Source**: Built from [https://gitlab.com/umb-svl/faial](https://gitlab.com/umb-svl/faial)
+2. **Build Tools**: Requires CMake, build-essential, and other development tools
+3. **Installation**: Faial binary is installed to `/usr/local/bin/faial` in the container
+4. **Verification**: Use the `/health` endpoint to verify Faial is working after deployment
+
+### Troubleshooting Faial Installation
+
+If Faial fails to install during Docker build:
+
+1. **Check the Faial repository** for updated installation instructions
+2. **Update the Dockerfile** with the correct build commands
+3. **Test locally** with `docker-compose up --build` before deploying
+4. **Check build logs** for specific error messages
+
+### Alternative Installation Methods
+
+If building from source doesn't work, you can:
+
+1. **Use pre-built binaries** (if available from Faial releases)
+2. **Install via package manager** (if Faial is available in system repositories)
+3. **Use Faial as a dependency** (if it's published to npm or similar)
 
 ## Configuration
 
