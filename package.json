@@ -8,7 +8,7 @@
     "faial-mcp": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node -e \"require('fs').copyFileSync('dist/index.js', 'api/index.js'); require('fs').copyFileSync('dist/faialRunner.js', 'api/faialRunner.js')\"",
+    "build": "tsc -p tsconfig.json && node -e \"const fs = require('fs'); const path = require('path'); if (!fs.existsSync('api')) fs.mkdirSync('api'); fs.copyFileSync('dist/index.js', 'api/index.js'); fs.copyFileSync('dist/faialRunner.js', 'api/faialRunner.js')\"",
     "start": "node dist/index.js",
     "dev": "node --loader ts-node/esm src/index.ts",
     "check": "tsc -p tsconfig.json --noEmit"

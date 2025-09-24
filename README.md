@@ -29,8 +29,13 @@ Railway is much better suited for this type of application with external depende
 
 1. **Sign up** at [railway.app](https://railway.app) (free tier available)
 2. **Connect your GitHub repo** to Railway
-3. **Deploy automatically** - Railway will build and run the Docker container
-4. **Faial CLI**: Automatically built and installed during container build
+3. **Deploy automatically** - Railway will:
+   - Build the Docker container
+   - Install all dependencies (including TypeScript)
+   - Build the application
+   - Install and build Faial CLI from source
+   - Start the MCP server
+4. **Get your deployment URL** from Railway dashboard
 
 **Why Railway?**
 - ✅ **Container-native**: Perfect for applications needing external binaries
@@ -56,6 +61,26 @@ If you prefer more control:
    ```
 
 3. **Deploy the container** using your chosen platform's interface
+
+### 🚨 Railway Deployment Troubleshooting
+
+**Common Issues:**
+
+1. **Build fails with "tsc: not found"**
+   - ✅ **Fixed**: Now installs all dependencies (including dev dependencies)
+
+2. **Faial CLI installation issues**
+   - Check Railway build logs for specific error messages
+   - The Dockerfile attempts multiple build methods for Faial
+   - You may need to adjust the Faial installation steps
+
+3. **Port issues**
+   - Railway automatically assigns a port
+   - The app uses `PORT` environment variable
+
+4. **Memory/timeout issues**
+   - Railway has generous limits for containers
+   - No serverless function constraints
 
 ### ⚠️ Option 3: Vercel (Serverless - Complex)
 

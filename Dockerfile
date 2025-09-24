@@ -14,8 +14,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install all dependencies (including dev dependencies for building)
+RUN npm ci
 
 # Copy source code
 COPY src/ ./src/
@@ -23,6 +23,12 @@ COPY tsconfig.json ./
 
 # Build the application
 RUN npm run build
+
+# Create the api directory for Railway deployment
+RUN mkdir -p api
+
+# Remove dev dependencies to reduce image size (optional)
+# RUN npm prune --production
 
 # Install Faial CLI
 # Based on the GitLab repo: https://gitlab.com/umb-svl/faial
@@ -70,9 +76,9 @@ RUN git clone https://gitlab.com/umb-svl/faial.git /tmp/faial && \
 # Verify Faial installation
 RUN faial --version || echo "Faial may need manual installation steps - check the repository README"
 
-# Create non-root user for security
-RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
+# Create non-root user for security (but keep root for Railway compatibility)
+# RUN useradd -m appuser && chown -R appuser:appuser /app
+# USER appuser
 
 # Expose port for HTTP server
 EXPOSE 3000
