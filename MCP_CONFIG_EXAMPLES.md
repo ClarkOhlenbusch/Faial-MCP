@@ -24,17 +24,28 @@ Railway automatically builds and deploys the Docker container with Faial CLI pre
 3. Railway automatically builds and deploys the container
 4. Get your app URL from Railway dashboard (e.g., `https://your-app-name.railway.app`)
 
-**MCP Configuration:**
+**Recommended Configuration:**
 ```json
 {
   "mcpServers": {
     "faial": {
-      "command": "fetch",
-      "args": ["https://your-railway-app.railway.app/sse"]
+      "command": "node",
+      "args": ["faial-client.js"]
     }
   }
 }
 ```
+
+**Setup:**
+1. Download the `faial-client.js` file from your repository
+2. Place it in your MCP configuration directory
+3. Use the configuration above
+
+**What this does:**
+- Uses Node.js to run the client script
+- Connects to your Railway-hosted MCP server
+- Handles the HTTP-based MCP protocol correctly
+- No dependency on browser `fetch` API
 
 **Testing Your Deployment:**
 1. Visit: `https://your-railway-app.railway.app/health`

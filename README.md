@@ -222,6 +222,8 @@ Outputs prefer JSON (when Faial supports `--format json`), falling back to plain
 
 See [MCP_CONFIG_EXAMPLES.md](MCP_CONFIG_EXAMPLES.md) for detailed configuration examples for various MCP clients.
 
+**Important**: HTTP-based MCP servers require a client script to work with desktop MCP clients like Claude Desktop. The `faial-client.js` script handles the HTTP-to-MCP protocol translation.
+
 ## 🔧 Faial Installation Notes
 
 The hosted MCP server builds Faial CLI from source during the Docker build process:
