@@ -1,4 +1,9 @@
-﻿from __future__ import annotations
+﻿# TODO: This file defines the MCP server for Faial. The following changes are proposed to improve the usability of the Faial tool for the agent:
+# 1.  **Improve the `INSTRUCTIONS`:** The `INSTRUCTIONS` should be updated to provide more context on Faial's compositional analysis and the importance of providing self-contained, well-formed kernel snippets.
+# 2.  **Enhance `AnalyzeRequest` descriptions:** The descriptions for the fields in the `AnalyzeRequest` model should be expanded to provide more detailed guidance on how to use each parameter effectively.
+# 3.  **Add examples:** Consider adding examples of "good" and "bad" kernel snippets to the documentation or as part of the tool definition to help the agent learn how to prepare code for Faial analysis.
+
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -14,13 +19,18 @@ from typing import Any, Dict, List, Optional, Tuple
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, Field, model_validator
 
+# TODO: The following functions and constants are all related to handling environment variables and should be moved to a new file called `env.py`.
+# {{{- env
 FAIAL_EXECUTABLE_ENV = "FAIAL_MCP_EXECUTABLE"
 CUTOJSON_ENV = "FAIAL_MCP_CU_TO_JSON"
 DEFAULT_TIMEOUT_ENV = "FAIAL_MCP_TIMEOUT_MS"
 DEFAULT_TRANSPORT_ENV = "FAIAL_MCP_TRANSPORT"
 DEFAULT_HOST_ENV = "FAIAL_MCP_HOST"
 DEFAULT_PORT_ENV = "FAIAL_MCP_PORT"
+# }}}
 
+
+# TODO: The INSTRUCTIONS should be updated to incorporate the findings from the `Faial-Optimal-Usage-Findings.md` file. This will provide the agent with more context on how to use Faial effectively. The instructions should emphasize the importance of providing self-contained, well-formed kernel snippets for analysis.
 INSTRUCTIONS = (
     "Expose Faial's data-race analysis (`faial-drf`) via the `analyze_kernel` tool. "
     "Provide either `file_path` (an existing CUDA/WGSL file) or inline `source`. "
@@ -29,7 +39,8 @@ INSTRUCTIONS = (
     "`find_true_data_races`, `grid_level`, `all_levels`, `all_dims`, `unreachable`, and `extra_args`."
 )
 
-
+# TODO: The following functions are all related to handling environment variables and should be moved to a new file called `env.py`.
+# {{{- env
 def _env_path(var: str) -> Optional[Path]:
     value = os.environ.get(var)
     if not value:
@@ -50,8 +61,12 @@ def _env_int(var: str) -> Optional[int]:
 def _env_str(var: str, default: str) -> str:
     value = os.environ.get(var)
     return value if value else default
+# }}}
 
 
+
+# TODO: The following functions are general-purpose utility functions and should be moved to a new file called `util.py`.
+# {{{- util
 def _resolve_with_base(path: Path, base: Optional[Path]) -> Path:
     candidate = Path(path).expanduser()
     if candidate.is_absolute():
@@ -69,8 +84,12 @@ def _resolve_executable(candidate: Path | str) -> str:
     if found:
         return found
     raise FileNotFoundError(f"Could not find executable: {candidate}")
+# }}}
 
 
+
+# TODO: The following Pydantic models are all related to the data structures used in the server. They should be moved to a new file called `models.py`.
+# {{{- models
 class _ServerDefaults(BaseModel):
     faial_executable: Path = Field(
         default=Path(os.environ.get(FAIAL_EXECUTABLE_ENV, "faial-drf"))
@@ -84,10 +103,12 @@ class _ServerDefaults(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
+    # TODO: The description for `file_path` should be expanded to emphasize that the file should contain a self-contained and well-formed kernel snippet.
     file_path: Optional[Path] = Field(
         default=None,
         description="Path to a CUDA or WGSL file accessible to the server.",
     )
+    # TODO: The description for `source` should be expanded to emphasize that the inline source should be a self-contained and well-formed kernel snippet.
     source: Optional[str] = Field(
         default=None,
         description="Inline source text to analyze when a file is not available.",
@@ -96,10 +117,12 @@ class AnalyzeRequest(BaseModel):
         default=None,
         description="Filename to associate with inline source (defaults to inline.cu).",
     )
+    # TODO: The description for `include_dirs` should be expanded to explain that this parameter can be used to provide the necessary header files for the analysis.
     include_dirs: List[Path] = Field(
         default_factory=list,
         description="Include directories passed via -I/--include-dir.",
     )
+    # TODO: The description for `macros` should be expanded to explain that this parameter can be used to define the macros that are required for the analysis.
     macros: Dict[str, Optional[str]] = Field(
         default_factory=dict,
         description="Macro definitions forwarded via -D.",
@@ -204,8 +227,12 @@ class AnalyzeResponse(BaseModel):
     stdout_json: Optional[Dict[str, Any]] = None
     stdout_parse_error: Optional[str] = None
     kernel_summaries: List[KernelSummary] = Field(default_factory=list)
+# }}}
 
 
+
+# TODO: The following functions are all part of the core analysis logic and should be moved to a new file called `faial.py`.
+# {{{- faial
 async def _run_faial(
     command: List[str],
     cwd: Path,
@@ -428,6 +455,8 @@ async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) 
     finally:
         if temp_dir is not None:
             temp_dir.cleanup()
+# }}}
+
 
 
 def create_server(*, host: Optional[str] = None, port: Optional[int] = None) -> FastMCP:
@@ -438,6 +467,7 @@ def create_server(*, host: Optional[str] = None, port: Optional[int] = None) -> 
         port=port or int(_env_str(DEFAULT_PORT_ENV, "8000")),
     )
 
+    # TODO: The description for the `analyze_kernel` tool should be expanded to provide a more detailed overview of what the tool does and what it should be used for. It should also include a reference to the best practices for preparing kernel snippets for analysis.
     @server.tool(name="analyze_kernel", description="Run Faial data-race analysis on CUDA/WGSL code.")
     async def analyze_kernel(request: AnalyzeRequest, ctx: Optional[Context] = None) -> AnalyzeResponse:
         return await _run_analysis(request, ctx)
