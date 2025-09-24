@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "dist/index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/health",
+      "dest": "/dist/index.js"
+    },
+    {
+      "src": "/sse",
+      "dest": "/dist/index.js"
+    },
+    {
+      "src": "/messages",
+      "dest": "/dist/index.js"
+    },
+    {
+      "src": "/analyze/(.*)",
+      "dest": "/dist/index.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/dist/index.js"
+    }
+  ],
+  "env": {
+    "TRANSPORT_MODE": "http",
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "dist/index.js": {
+      "maxDuration": 300
+    }
+  }
+}

@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  faial-mcp:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - TRANSPORT_MODE=http
+      - PORT=3000
+      - FAIAL_PATH=/usr/local/bin/faial
+    volumes:
+      # Optional: Mount host directory for file analysis
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
