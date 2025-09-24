@@ -4,3 +4,6 @@ dist/
 *.log
 *.tsbuildinfo
 .vercel
+.venv
+faial_mcp_server/__pycache__/
+faial_mcp_server.egg-info/
