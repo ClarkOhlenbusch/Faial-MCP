@@ -117,7 +117,18 @@ export async function runFaial(args, options = {}) {
             });
             child.on("error", (err) => {
                 clearTimeout(timer);
-                resolve({ stdout: "", stderr: String(err), code: -1, timedOut: false });
+                const errorMsg = String(err);
+                if (errorMsg.includes('ENOENT')) {
+                    resolve({
+                        stdout: "",
+                        stderr: `Faial executable not found in WSL. Please ensure Faial is installed in your WSL distribution or set FAIAL_WSL_PATH environment variable.`,
+                        code: -1,
+                        timedOut: false
+                    });
+                }
+                else {
+                    resolve({ stdout: "", stderr: errorMsg, code: -1, timedOut: false });
+                }
             });
         });
     }
@@ -145,7 +156,18 @@ export async function runFaial(args, options = {}) {
         });
         child.on("error", (err) => {
             clearTimeout(timer);
-            resolve({ stdout: "", stderr: String(err), code: -1, timedOut: false });
+            const errorMsg = String(err);
+            if (errorMsg.includes('ENOENT')) {
+                resolve({
+                    stdout: "",
+                    stderr: `Faial executable not found. Please ensure Faial is properly installed and available in PATH or set FAIAL_PATH environment variable.`,
+                    code: -1,
+                    timedOut: false
+                });
+            }
+            else {
+                resolve({ stdout: "", stderr: errorMsg, code: -1, timedOut: false });
+            }
         });
     });
 }

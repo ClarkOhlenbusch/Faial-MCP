@@ -208,12 +208,28 @@ app.get('/health', (req, res) => {
 });
 // MCP SSE endpoint
 app.get('/sse', async (req, res) => {
-    const transport = new SSEServerTransport("/messages", res);
-    await server.connect(transport);
-    // Handle client disconnections
-    req.on('close', () => {
-        transport.close();
-    });
+    try {
+        // Set up SSE headers
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+        const transport = new SSEServerTransport("/messages", res);
+        await server.connect(transport);
+        // Handle client disconnections
+        req.on('close', () => {
+            transport.close();
+        });
+        req.on('error', (err) => {
+            console.error('SSE request error:', err);
+            transport.close();
+        });
+    }
+    catch (error) {
+        console.error('SSE endpoint error:', error);
+        res.status(500).json({ error: 'SSE connection failed' });
+    }
 });
 // MCP messages endpoint
 app.post('/messages', async (req, res) => {
