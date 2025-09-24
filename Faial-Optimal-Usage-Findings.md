@@ -19,6 +19,7 @@ Faial performs a static analysis, which means it only knows about the code that 
 *   **All type definitions:** Any custom structs, enums, or typedefs used in the kernel must be included.
 *   **All helper functions:** If the kernel calls any helper functions, their definitions must be included in the snippet.
 *   **All constants and macros:** Any constants or macros used in the kernel must be defined.
+*   **Work Around:** If need you can work around by having --ignore-parsing-errors. Using this is not recommended but works in some cases.
 
 ### 2. Ensure Syntactic Correctness
 
