@@ -1,5 +1,6 @@
 # Test the deployed Faial MCP server
-$uri = "https://faial-kzbprfltn-clark-ohlenbuschs-projects.vercel.app/health"
+# Replace YOUR-RAILWAY-APP-NAME with your actual Railway app name
+$uri = "https://YOUR-RAILWAY-APP-NAME.railway.app/health"
 
 try {
     $response = Invoke-WebRequest -Uri $uri -UseBasicParsing -TimeoutSec 10

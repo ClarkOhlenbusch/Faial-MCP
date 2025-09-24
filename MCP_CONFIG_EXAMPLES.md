@@ -22,7 +22,7 @@ Railway automatically builds and deploys the Docker container with Faial CLI pre
 1. Sign up at [railway.app](https://railway.app)
 2. Connect your GitHub repository
 3. Railway automatically builds and deploys the container
-4. Get your app URL from Railway dashboard
+4. Get your app URL from Railway dashboard (e.g., `https://your-app-name.railway.app`)
 
 **MCP Configuration:**
 ```json
@@ -35,6 +35,11 @@ Railway automatically builds and deploys the Docker container with Faial CLI pre
   }
 }
 ```
+
+**Testing Your Deployment:**
+1. Visit: `https://your-railway-app.railway.app/health`
+2. Should return: `{"status":"ok","service":"faial-mcp","version":"0.1.0"}`
+3. Check Railway logs if there are issues
 
 ## MCP Client Configurations
 
