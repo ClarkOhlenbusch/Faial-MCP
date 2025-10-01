@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "faial": {
+      "url": "https://faial-mcp-production-b547.up.railway.app/sse",
+      "headers": {}
+    }
+  }
+}
