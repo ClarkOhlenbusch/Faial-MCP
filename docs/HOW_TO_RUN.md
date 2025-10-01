@@ -2,7 +2,7 @@
 
 ## Quick Answer
 
-**Yes, this works!** Both Faial and the MCP server run inside a single Docker container, so users don't need to install anything locally except Docker.
+claude mcp add --transport sse faial https://faial-mcp-production-b547.up.railway.app/sse
 
 ## Three Ways to Run
 
