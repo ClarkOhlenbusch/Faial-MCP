@@ -30,10 +30,23 @@ DEFAULT_PORT_ENV = "FAIAL_MCP_PORT"
 # }}}
 
 
-# TODO: The INSTRUCTIONS should be updated to incorporate the findings from the `Faial-Optimal-Usage-Findings.md` file. This will provide the agent with more context on how to use Faial effectively. The instructions should emphasize the importance of providing self-contained, well-formed kernel snippets for analysis.
 INSTRUCTIONS = (
     "Expose Faial's data-race analysis (`faial-drf`) via the `analyze_kernel` tool. "
-    "Provide either `file_path` (an existing CUDA/WGSL file) or inline `source`. "
+    "\n\n"
+    "## Input Methods\n"
+    "Provide either `file_path` or inline `source`:\n"
+    "- **`source` (recommended)**: Pass kernel code directly as a string. This is the simplest and most reliable method, "
+    "especially when the MCP server runs in a container. Example: `{\"source\": \"__global__ void kernel() {...}\", \"virtual_filename\": \"test.cu\"}`\n"
+    "- **`file_path`**: Path to an existing CUDA/WGSL file. If running in Docker, ensure the file is accessible within the container "
+    "or use volume mounts. Use `working_directory` to specify the base directory for relative paths.\n"
+    "\n"
+    "## Best Practices\n"
+    "- Provide **self-contained, well-formed kernel snippets** for analysis\n"
+    "- Include all necessary type definitions, macros, and kernel launch parameters\n"
+    "- Use `include_dirs` and `macros` to provide required headers and definitions\n"
+    "- Use `ignore_parsing_errors` flag if analyzing partial code with minor syntax issues\n"
+    "\n"
+    "## Configuration Parameters\n"
     "Optional fields mirror CLI flags: `include_dirs`, `macros`, `params`, `block_dim`, "
     "`grid_dim`, `only_kernel`, `only_array`, `timeout_ms`, `ignore_parsing_errors`, "
     "`find_true_data_races`, `grid_level`, `all_levels`, `all_dims`, `unreachable`, and `extra_args`."
@@ -103,29 +116,43 @@ class _ServerDefaults(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
-    # TODO: The description for `file_path` should be expanded to emphasize that the file should contain a self-contained and well-formed kernel snippet.
     file_path: Optional[Path] = Field(
         default=None,
-        description="Path to a CUDA or WGSL file accessible to the server.",
+        description=(
+            "Path to a CUDA or WGSL file accessible to the server. "
+            "The file should contain self-contained, well-formed kernel code. "
+            "If the server runs in a container, ensure the path is accessible via volume mounts. "
+            "Relative paths are resolved against `working_directory` or the current directory."
+        ),
     )
-    # TODO: The description for `source` should be expanded to emphasize that the inline source should be a self-contained and well-formed kernel snippet.
     source: Optional[str] = Field(
         default=None,
-        description="Inline source text to analyze when a file is not available.",
+        description=(
+            "Inline source text to analyze (recommended over file_path for simplicity). "
+            "Provide self-contained, well-formed kernel code as a string. "
+            "This avoids path resolution issues when the server runs in a container."
+        ),
     )
     virtual_filename: Optional[str] = Field(
         default=None,
-        description="Filename to associate with inline source (defaults to inline.cu).",
+        description=(
+            "Filename to associate with inline source (defaults to inline.cu). "
+            "Use this to specify the file extension (.cu for CUDA, .wgsl for WGSL) when using `source`."
+        ),
     )
-    # TODO: The description for `include_dirs` should be expanded to explain that this parameter can be used to provide the necessary header files for the analysis.
     include_dirs: List[Path] = Field(
         default_factory=list,
-        description="Include directories passed via -I/--include-dir.",
+        description=(
+            "Include directories for resolving #include directives, passed via -I/--include-dir. "
+            "Use this to provide paths to necessary header files required for analysis."
+        ),
     )
-    # TODO: The description for `macros` should be expanded to explain that this parameter can be used to define the macros that are required for the analysis.
     macros: Dict[str, Optional[str]] = Field(
         default_factory=dict,
-        description="Macro definitions forwarded via -D.",
+        description=(
+            "Macro definitions forwarded via -D (e.g., {'DEBUG': '1', 'FEATURE': None}). "
+            "Use this to define preprocessor macros required for successful kernel parsing."
+        ),
     )
     params: Dict[str, int] = Field(
         default_factory=dict,
@@ -467,8 +494,15 @@ def create_server(*, host: Optional[str] = None, port: Optional[int] = None) -> 
         port=port or int(_env_str(DEFAULT_PORT_ENV, "8000")),
     )
 
-    # TODO: The description for the `analyze_kernel` tool should be expanded to provide a more detailed overview of what the tool does and what it should be used for. It should also include a reference to the best practices for preparing kernel snippets for analysis.
-    @server.tool(name="analyze_kernel", description="Run Faial data-race analysis on CUDA/WGSL code.")
+    @server.tool(
+        name="analyze_kernel",
+        description=(
+            "Run Faial data-race analysis on CUDA/WGSL kernel code to detect potential data races. "
+            "Faial uses formal verification to prove kernels are data-race free or provide concrete counterexamples. "
+            "For best results, provide self-contained kernel code via the `source` parameter with all necessary type definitions. "
+            "Use `include_dirs` and `macros` to resolve dependencies. Set `ignore_parsing_errors=True` for partial code analysis."
+        )
+    )
     async def analyze_kernel(request: AnalyzeRequest, ctx: Optional[Context] = None) -> AnalyzeResponse:
         return await _run_analysis(request, ctx)
 
