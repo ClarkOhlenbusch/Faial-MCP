@@ -1,0 +1,3 @@
+# This directory is for CUDA files you want to analyze with Faial MCP
+# Place your .cu files here and they will be accessible at /workspace/ in the container
+

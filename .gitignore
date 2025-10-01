@@ -131,3 +131,9 @@ dmypy.json
 # IDEs
 .vscode/
 .idea/
+
+# Workspace directory for Docker volume mounts
+# Keep .gitkeep and example.cu, but ignore user files
+workspace/*
+!workspace/.gitkeep
+!workspace/example.cu

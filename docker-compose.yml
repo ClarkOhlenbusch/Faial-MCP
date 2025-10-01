@@ -1,0 +1,23 @@
+services:
+  faial-mcp:
+    build: .
+    image: faial-mcp:latest
+    container_name: faial-mcp-server
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount a workspace directory for analyzing files from the host
+      - ./workspace:/workspace
+    environment:
+      # Default timeout: 60 seconds
+      - FAIAL_MCP_TIMEOUT_MS=60000
+      # Faial executable path (already set in Dockerfile)
+      - FAIAL_MCP_EXECUTABLE=/opt/faial/faial-drf
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 8000)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+

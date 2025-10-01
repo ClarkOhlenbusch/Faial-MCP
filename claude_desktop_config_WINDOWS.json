@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "faial": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-v",
+        "C:\\Users\\clark\\OneDrive\\Desktop\\Faial-MCP\\workspace:/workspace",
+        "faial-mcp",
+        "faial-mcp-server",
+        "--transport",
+        "stdio"
+      ]
+    }
+  }
+}
+
