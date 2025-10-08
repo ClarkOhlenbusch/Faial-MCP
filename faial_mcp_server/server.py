@@ -1,4 +1,4 @@
-﻿# TODO: This file defines the MCP server for Faial. The following changes are proposed to improve the usability of the Faial tool for the agent:
+# TODO: This file defines the MCP server for Faial. The following changes are proposed to improve the usability of the Faial tool for the agent:
 # 1.  **Improve the `INSTRUCTIONS`:** The `INSTRUCTIONS` should be updated to provide more context on Faial's compositional analysis and the importance of providing self-contained, well-formed kernel snippets.
 # 2.  **Enhance `AnalyzeRequest` descriptions:** The descriptions for the fields in the `AnalyzeRequest` model should be expanded to provide more detailed guidance on how to use each parameter effectively.
 # 3.  **Add examples:** Consider adding examples of "good" and "bad" kernel snippets to the documentation or as part of the tool definition to help the agent learn how to prepare code for Faial analysis.
@@ -33,23 +33,30 @@ DEFAULT_PORT_ENV = "FAIAL_MCP_PORT"
 INSTRUCTIONS = (
     "Expose Faial's data-race analysis (`faial-drf`) via the `analyze_kernel` tool. "
     "\n\n"
-    "## Input Methods\n"
-    "Provide either `file_path` or inline `source`:\n"
-    "- **`source` (recommended)**: Pass kernel code directly as a string. This is the simplest and most reliable method, "
-    "especially when the MCP server runs in a container. Example: `{\"source\": \"__global__ void kernel() {...}\", \"virtual_filename\": \"test.cu\"}`\n"
-    "- **`file_path`**: Path to an existing CUDA/WGSL file. If running in Docker, ensure the file is accessible within the container "
-    "or use volume mounts. Use `working_directory` to specify the base directory for relative paths.\n"
+    "## Input Method\n"
+    "**MANDATORY:** Provide kernel code via the `source` parameter only. File paths are not supported to ensure reliable, "
+    "container-compatible analysis and proper input preparation.\n"
     "\n"
-    "## Best Practices\n"
-    "- Provide **self-contained, well-formed kernel snippets** for analysis\n"
-    "- Include all necessary type definitions, macros, and kernel launch parameters\n"
-    "- Use `include_dirs` and `macros` to provide required headers and definitions\n"
-    "- Use `ignore_parsing_errors` flag if analyzing partial code with minor syntax issues\n"
+    "- **`source` (required)**: Pass self-contained kernel code directly as a string. Include all necessary type definitions, "
+    "macros, and dependencies. Example: `{\"source\": \"__global__ void kernel() { ... }\", \"virtual_filename\": \"test.cu\"}`\n"
+    "\n"
+    "## Critical Requirements\n"
+    "- **MANDATORY:** Provide **self-contained, well-formed kernel snippets** - each kernel must be isolated with all dependencies\n"
+    "- **MANDATORY:** Include all necessary type definitions, structs, constants, and macros within the source\n"
+    "- **MANDATORY:** Avoid full-file dumps - analyze individual kernels separately to prevent false positives\n"
+    "- Use `include_dirs` and `macros` to resolve external dependencies when needed\n"
+    "- Use `ignore_parsing_errors` flag sparingly for partial code analysis\n"
     "\n"
     "## Configuration Parameters\n"
     "Optional fields mirror CLI flags: `include_dirs`, `macros`, `params`, `block_dim`, "
     "`grid_dim`, `only_kernel`, `only_array`, `timeout_ms`, `ignore_parsing_errors`, "
-    "`find_true_data_races`, `grid_level`, `all_levels`, `all_dims`, `unreachable`, and `extra_args`."
+    "`find_true_data_races`, `grid_level`, `all_levels`, `all_dims`, `unreachable`, and `extra_args`.\n"
+    "\n"
+    "## Agent Preparation Guidelines\n"
+    "- **Isolate each kernel:** Extract individual kernels from source files\n"
+    "- **Resolve dependencies:** Include all required types, constants, and function declarations\n"
+    "- **Avoid cross-contamination:** Never analyze multiple unrelated kernels together\n"
+    "- **Test incrementally:** Start with minimal, well-formed kernels before complex analysis"
 )
 
 # TODO: The following functions are all related to handling environment variables and should be moved to a new file called `env.py`.
@@ -116,21 +123,10 @@ class _ServerDefaults(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
-    file_path: Optional[Path] = Field(
-        default=None,
+    source: str = Field(
         description=(
-            "Path to a CUDA or WGSL file accessible to the server. "
-            "The file should contain self-contained, well-formed kernel code. "
-            "If the server runs in a container, ensure the path is accessible via volume mounts. "
-            "Relative paths are resolved against `working_directory` or the current directory."
-        ),
-    )
-    source: Optional[str] = Field(
-        default=None,
-        description=(
-            "Inline source text to analyze (recommended over file_path for simplicity). "
-            "Provide self-contained, well-formed kernel code as a string. "
-            "This avoids path resolution issues when the server runs in a container."
+            "MANDATORY: Self-contained kernel source code as a string. Include all necessary type definitions, "
+            "macros, structs, constants, and dependencies. Each kernel must be isolated and complete."
         ),
     )
     virtual_filename: Optional[str] = Field(
@@ -229,9 +225,9 @@ class AnalyzeRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _validate_target(self) -> "AnalyzeRequest":
-        if not self.file_path and not self.source:
-            raise ValueError("Provide either file_path or source for analysis.")
+    def _validate_source(self) -> "AnalyzeRequest":
+        if not self.source or not self.source.strip():
+            raise ValueError("source parameter is mandatory and cannot be empty. Provide self-contained kernel code as a string.")
         return self
 
 
@@ -365,22 +361,14 @@ async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) 
 
     temp_dir: Optional[tempfile.TemporaryDirectory[str]] = None
     try:
-        if request.source:
-            temp_dir = tempfile.TemporaryDirectory()
-            filename = request.virtual_filename or "inline.cu"
-            target_path = Path(temp_dir.name) / filename
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            target_path.write_text(request.source, encoding="utf-8")
-            if working_directory is None:
-                working_directory = target_path.parent
-        else:
-            assert request.file_path is not None  # for mypy
-            base_dir = working_directory or Path.cwd()
-            target_path = _resolve_with_base(request.file_path, base_dir)
-            if not target_path.exists():
-                raise FileNotFoundError(f"Target file not found: {target_path}")
-            if working_directory is None:
-                working_directory = target_path.parent
+        # Only source-based analysis is supported
+        temp_dir = tempfile.TemporaryDirectory()
+        filename = request.virtual_filename or "inline.cu"
+        target_path = Path(temp_dir.name) / filename
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(request.source, encoding="utf-8")
+        if working_directory is None:
+            working_directory = target_path.parent
 
         assert working_directory is not None
         working_directory = working_directory.resolve()
@@ -497,14 +485,29 @@ def create_server(*, host: Optional[str] = None, port: Optional[int] = None) -> 
     @server.tool(
         name="analyze_kernel",
         description=(
-            "Run Faial data-race analysis on CUDA/WGSL kernel code to detect potential data races. "
+            "Run Faial data-race analysis on isolated CUDA/WGSL kernels to detect potential data races. "
+            "**MANDATORY:** Use ONLY the `source` parameter - file paths are not supported. "
             "Faial uses formal verification to prove kernels are data-race free or provide concrete counterexamples. "
-            "For best results, provide self-contained kernel code via the `source` parameter with all necessary type definitions. "
-            "Use `include_dirs` and `macros` to resolve dependencies. Set `ignore_parsing_errors=True` for partial code analysis."
+            "**CRITICAL:** Provide self-contained, well-formed kernel snippets with ALL necessary dependencies included. "
+            "Each kernel must be analyzed separately to avoid false positives from cross-kernel interference. "
+            "Include all type definitions, structs, constants, and macros within the source code. "
+            "Use `include_dirs` and `macros` to resolve external dependencies when needed. "
+            "Set `ignore_parsing_errors=True` only for partial code analysis."
         )
     )
-    async def analyze_kernel(request: AnalyzeRequest, ctx: Optional[Context] = None) -> AnalyzeResponse:
-        return await _run_analysis(request, ctx)
+    async def analyze_kernel(request: dict, ctx: Optional[Context] = None) -> AnalyzeResponse:
+        # Handle both wrapped {"request": {...}} and flattened {...} parameter formats for compatibility
+        if "request" in request:
+            # Standard MCP format
+            req_obj = AnalyzeRequest(**request["request"])
+        else:
+            # Flattened format (compatibility)
+            req_obj = AnalyzeRequest(**request)
+
+        # DEBUG: Log incoming request parameters
+        import json
+        print(f"DEBUG: Received request parameters: {json.dumps(req_obj.model_dump(), indent=2)}", file=__import__('sys').stderr)
+        return await _run_analysis(req_obj, ctx)
 
     return server
 
