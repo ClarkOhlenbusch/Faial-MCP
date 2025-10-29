@@ -1,0 +1,139 @@
+//pass
+//--gridDim=[12,24]      --blockDim=[32,16]
+
+#define k_blockDimX    32
+#define k_blockDimMaxY 16
+// Note: If you change the RADIUS, you should also change the unrolling below
+#define RADIUS 4
+
+__constant__ float stencil[RADIUS + 1];
+
+__global__ void FiniteDifferencesKernel(float *output,
+                                        const float *input,
+                                        const int dimx,
+                                        const int dimy,
+                                        const int dimz)
+{
+    __requires(dimx == 96);
+    __requires(dimy == 96);
+    __requires(dimz == 96);
+
+    const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+    const int ltidx = threadIdx.x;
+    const int ltidy = threadIdx.y;
+    const int workx = blockDim.x;
+    const int worky = blockDim.y;
+    __shared__ float tile[k_blockDimMaxY + 2 * RADIUS][k_blockDimX + 2 * RADIUS];
+
+    const int stride_y = dimx + 2 * RADIUS;
+    const int stride_z = stride_y * (dimy + 2 * RADIUS);
+
+    int inputIndex  = 0;
+    int outputIndex = 0;
+
+    // Advance inputIndex to start of inner volume
+    inputIndex += RADIUS * stride_y + RADIUS;
+
+    // Advance inputIndex to target element
+    inputIndex += gtidy * stride_y + gtidx;
+
+    float infront[RADIUS];
+    float behind[RADIUS];
+    float current;
+
+    const int tx = ltidx + RADIUS;
+    const int ty = ltidy + RADIUS;
+
+    // Check in bounds
+    bool validr = ! ((gtidx >= dimx + RADIUS) || (gtidy >= dimy + RADIUS));
+    bool validw = ! ((gtidx >= dimx) || (gtidy >= dimy));
+
+    // Preload the "infront" and "behind" data
+    for (int j = 2; j < RADIUS; j++)
+    {
+        int i = RADIUS - j;
+        if (validr)
+            behind[i] = input[inputIndex + j * stride_z];
+    }
+    inputIndex += 2 * stride_z;
+
+    if (validr)
+        current = input[inputIndex];
+
+    outputIndex = inputIndex;
+    inputIndex += stride_z;
+
+    for (int i = 0 ; i < RADIUS ; i++)
+    {
+        if (validr)
+            infront[i] = input[inputIndex + i * stride_z];
+
+    }
+    inputIndex = inputIndex + stride_z * RADIUS;
+
+    // Step through the xy-planes
+#pragma unroll 9
+
+    for (int iz = 0 ;
+         __global_invariant((outputIndex - ((RADIUS + gtidy) * stride_y + RADIUS + gtidx))%stride_z == 0),
+         __global_invariant(__write_implies(output, (__write_offset(output)/sizeof(float) - ((RADIUS + gtidy) * stride_y + RADIUS + gtidx))%stride_z == 0)),
+         __global_invariant(__implies(gtidx >= dimx, !__write(output))),
+         __global_invariant(__implies(gtidy >= dimx, !__write(output))),
+         iz < dimz ; iz++)
+    {
+        // Advance the slice (move the thread-front)
+        for (int i = RADIUS - 1 ; i > 0 ; i--)
+            behind[i] = behind[i - 1];
+
+        behind[0] = current;
+        current = infront[0];
+#pragma unroll 4
+
+        for (int i = 0 ; i < RADIUS - 1 ; i++)
+            infront[i] = infront[i + 1];
+
+        if (validr)
+            infront[RADIUS - 1] = input[inputIndex + iz * stride_z];
+
+        __syncthreads();
+
+        // Note that for the work items on the boundary of the problem, the
+        // supplied index when reading the halo (below) may wrap to the
+        // previous/next row or even the previous/next xy-plane. This is
+        // acceptable since a) we disable the output write for these work
+        // items and b) there is at least one xy-plane before/after the
+        // current plane, so the access will be within bounds.
+
+        // Update the data slice in the local tile
+        // Halo above & below
+        if (ltidy < RADIUS)
+        {
+            tile[ltidy][tx]                  = input[outputIndex - RADIUS * stride_y + iz * stride_z];
+            tile[ltidy + worky + RADIUS][tx] = input[outputIndex + worky * stride_y + iz + stride_z];
+        }
+
+        // Halo left & right
+        if (ltidx < RADIUS)
+        {
+            tile[ty][ltidx]                  = input[outputIndex - RADIUS + iz * stride_z];
+            tile[ty][ltidx + workx + RADIUS] = input[outputIndex + workx + iz * stride_z];
+        }
+
+        tile[ty][tx] = current;
+        __syncthreads();
+
+        // Compute the output value
+        float value = stencil[0] * current;
+#pragma unroll 4
+
+        for (int i = 1 ; i <= RADIUS ; i++)
+        {
+            value += stencil[i] * (infront[i-1] + behind[i-1] + tile[ty - i][tx] + tile[ty + i][tx] + tile[ty][tx - i] + tile[ty][tx + i]);
+        }
+
+        // Store the output value
+        if (validw)
+            output[outputIndex + iz * stride_z] = value;
+    }
+}

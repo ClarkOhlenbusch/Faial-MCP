@@ -1,0 +1,17 @@
+FORCE_FAIL
+  if defined ensure fail to check for vacuous passing
+
+IMPLEMENT_VOTE_INTRINSICS
+  if defined use intrinsics
+  else define as uninterpreted functions
+
+IMPLEMENT_VECTOR
+  if defined use builtin vector-scalar functions
+  else work around
+
+IMPLEMENT_SURFACE
+  if defined use surfaces
+  else ignore for now
+
+KERNEL_BUG
+  if defined then don't fix the bug

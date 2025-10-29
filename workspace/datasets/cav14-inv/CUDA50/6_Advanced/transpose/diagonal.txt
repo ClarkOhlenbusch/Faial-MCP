@@ -1,0 +1,23 @@
+Notes about transposeDiagonal.cu
+
+Access to odata:
+  index_out+i*height
+  index_out = xIndex + (yIndex)*height;
+    blockIdx_y * TILE_DIM + threadIdx.x + 
+    (blockIdx_x * TILE_DIM + threadIdx.y) * height
+
+  = (if width == height)
+    ((blockIdx.x+blockIdx.y)%gridDim.x) * TILE_DIM + threadIdx.x +
+    (blockIdx.x * TILE_DIM + threadIdx.y) * height;
+  else
+    ((bid/gridDim.y)+blockIdx_y)%gridDim.x * TILE_DIM + threadIdx.x + 
+    (bid%gridDim.y) * height;
+
+
+blockIdx_x = (blockIdx.x+blockIdx.y)%gridDim.x;
+           | ((bid/gridDim.y)+blockIdx_y)%gridDim.x;
+blockIdx_y = blockIdx.x;
+           | ((bid/gridDim.y)+blockIdx_y)%gridDim.x;
+
+height = 1024
+i = 0, BLOCK_ROWS, 2BLOCK_ROWS, ..., 

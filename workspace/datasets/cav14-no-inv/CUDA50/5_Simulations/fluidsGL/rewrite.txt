@@ -1,0 +1,83 @@
+BV32_MUL(
+    BV32_ADD(
+      BV32_MUL(
+        BV32_ADD(
+          BV32_ADD(
+            BV32_MUL(
+              group_id_y$1,
+              BV32_MUL(
+                $lb,
+                group_size_y)),
+            BV32_MUL(
+              local_id_y$1,
+              $lb)),
+          $p.0$1),
+        $dx),
+      BV32_ADD(
+        BV32_MUL(
+          group_id_x$1,
+          group_size_x),
+        local_id_x$1)),
+    2bv32)
+
+BV32_ADD(
+    BV32_MUL(
+      2bv32,
+      BV32_ADD(
+        BV32_ADD(
+          BV32_MUL(
+            $dx,
+            BV32_MUL(
+              group_id_y$1,
+              BV32_MUL(
+                $lb,
+                group_size_y))),
+          BV32_MUL(
+            $dx,
+            BV32_MUL(
+              local_id_y$1,
+              $lb))),
+        BV32_MUL(
+          $dx,
+          $p.0$1))),
+    BV32_ADD(
+      BV32_MUL(
+        2bv32,
+        BV32_MUL(
+          group_id_x$1,
+          group_size_x)),
+      BV32_MUL(
+        2bv32,
+        local_id_x$1)))
+
+BV32_ADD(
+  BV32_MUL(
+    2bv32,
+      BV32_MUL(
+        BV32_ADD(
+          BV32_ADD(
+            BV32_MUL(
+              group_id_y$1,
+              BV32_MUL(
+                $lb,
+                group_size_y)),
+            BV32_MUL(
+              local_id_y$1,
+              $lb)),
+          $p.0$1),
+        $dx)),
+  BV32_MUL(
+    2bv32,
+    BV32_ADD(
+      BV32_MUL(
+        group_id_x$1,
+        group_size_x),
+      local_id_x$1)))
+
+BV32_ADD(BV32_ADD(BV32_ADD(
+        BV32_MUL(2bv32, BV32_MUL($dx, BV32_MUL(group_id_y$1, BV32_MUL($lb, group_size_y)))),
+        BV32_MUL(2bv32, BV32_MUL($dx, BV32_MUL(local_id_y$1, $lb)))),
+        BV32_MUL(2bv32, BV32_MUL($dx, $p.0$1))),
+    BV32_ADD(
+        BV32_MUL(2bv32, BV32_MUL(group_id_x$1, group_size_x)),
+        BV32_MUL(2bv32, local_id_x$1)))

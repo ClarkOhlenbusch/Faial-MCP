@@ -1,0 +1,33 @@
+//pass
+//--gridDim=1                --blockDim=32
+
+#define syncthreads __syncthreads
+#ifdef FAIAL
+typedef unsigned int clock_t;
+#endif
+__global__ void sum(clock_t *d_clocks, int N)
+{
+    __shared__ clock_t s_clocks[32];
+
+    clock_t my_sum = 0;
+
+    for (int i = threadIdx.x; i < N; i+= blockDim.x)
+    {
+        my_sum += d_clocks[i];
+    }
+
+    s_clocks[threadIdx.x] = my_sum;
+    syncthreads();
+
+    for (int i=16; i>0; i/=2)
+    {
+        if (threadIdx.x < i)
+        {
+            s_clocks[threadIdx.x] += s_clocks[threadIdx.x + i];
+        }
+
+        syncthreads();
+    }
+    if (threadIdx.x == 0)
+    d_clocks[0] = s_clocks[0];
+}

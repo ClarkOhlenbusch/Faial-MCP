@@ -1,0 +1,87 @@
+Benchmarks used in our CAV 2014 paper
+=====================================
+
+We give all benchmarks used in our paper except for the Rightware basemark
+kernels, which was provided to us under an academic license. That is, 
+we include 502 kernels in this tarball, broken down as follows:
+
+  - AMD Accelerated Parallel Processing SDK v2.6 (78 OpenCL kernels)
+  - NVIDIA GPU Computing SDK v5.0 (166 CUDA kernels); we also include 8
+    CUDA kernels from a previous version of the SDK (v2.0)
+  - Microsoft C++ AMP Sample Projects (20 kernels, hand translated to CUDA)
+  - The gpgpu-sim benchmarks (33 CUDA kernels)
+  - The Parboil benchmarks v2.5 (25 OpenCL kernels)
+  - The Rodinia benchmark suite v2.4 (36 OpenCL kernels)
+  - The SHOC benchmark suite (87 OpenCL kernels)
+  - The PolyBench/GPU benchmark suite (49 OpenCL kernels)
+
+Each kernel is annotated at the top by two comments. These are used to pass
+arguments to GPUVerify and are understood by our test harness, gvtester.py.
+
+Help
+----
+
+Please contact Nathan Chong <n.chong10@imperial.ac.uk> with any queries about
+these experiments.
+
+Setup
+-----
+
+The major step is to ensure that GPUVerify.py is on your path and working
+correctly.
+
+You can get a copy of the tool used in our paper from:
+
+  http://multicore.doc.ic.ac.uk/tools/GPUVerify/CAV2014
+
+The tarball includes a regression that you should make sure passes on your
+machine. In particular, the Linux download requires mono >= 3.0.7.
+
+Running a single benchmark
+--------------------------
+
+Assuming the above setup is correct, run a single benchmark, e.g.,
+AMD_SDK/AtomicCounters/kernel2/kernel.cl as follows:
+
+  ./scripts/runsingle.py --solver=[z3|cvc4] --config=[baseline|rr|rr+bi|rr+bi+pa|rr+bi+pa+wd|noua|noam] AMD_SDK/AtomicCounters/kernel2/kernel.cl 
+
+where the configurations are described in the paper. We give a summary here:
+
+  - baseline:     No optimisations but including uniformity analysis and array modeling
+  - rr:           baseline plus redundant read optimisation
+  - rr+bi:        rr plus barrier interval optimisation
+  - rr+bi+pa:     rr+bi plus private array remove optimisation
+  - rr+bi+pa+wd:  rr+bi+pa plus watchdog race checking
+  - noua:         baseline except uniformity analysis is off
+  - noam:         baseline except array modeling is off
+         
+Running the whole testsuite
+---------------------------
+
+The following are commands to invoke GPUVerify over the whole testsuite for each
+of the configurations that we list in the paper.
+
+In the paper we report comparisons between optimisations (baseline, rr, rr+bi,
+rr+bi+pa, rr+bi+pa+wd) over 492 responsive kernels. These are listed in
+[responsive.txt], except that we have omitted 56 kernels in the Rightware suite,
+leaving 436 kernels.
+
+Assuming the above setup is correct, run the whole testsuite as follows:
+
+  cd CAV2014Experiments
+  scripts/runsuite.py --solver=[z3|cvc4] --config=[baseline|rr|rr+bi|rr+bi+pa|rr+bi+pa+wd|noua|noam]
+
+You should expect to see output like the following:
+
+  INFO:Found 243 OpenCL kernels, 193 CUDA kernels and 0 miscellaneous tests
+  INFO:Using 4 threads
+  INFO:Running tests...
+  INFO:[Thread-1] Running test /Users/nafe/work/CAV2014Experiments/AMD_SDK/AESEncryptDecrypt/kernel1/kernel.cl
+  INFO:[Thread-2] Running test /Users/nafe/work/CAV2014Experiments/AMD_SDK/AESEncryptDecrypt/kernel2/kernel.cl
+  ...
+
+Timings for approximate runtimes are given in the paper (Table 1). The whole
+suite will take several hours to complete.
+
+When the suite is complete it will have deposited a comma-separate value output
+in CAV2014Experiments/data.

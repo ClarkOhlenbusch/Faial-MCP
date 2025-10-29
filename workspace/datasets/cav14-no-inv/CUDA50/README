@@ -1,0 +1,2 @@
+Recommended way to run gvtester.py:
+  gvtester.py --kernel-regex "[^\._].*\.cu" .
