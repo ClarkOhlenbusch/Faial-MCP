@@ -25,7 +25,6 @@ __global__ void total(float * input, float * output, unsigned int len) {
     if (j + blockDim.x < len) localSum += input[j + blockDim.x];
 
     sum[i] = localSum;
-    // __syncthreads();
 
   for (unsigned int step = blockDim.x / 2; step >= 1; step >>= 1) {
     if (i < step) sum[i] = localSum = localSum + sum[i + step];

@@ -39,7 +39,6 @@ __global__ void scan(float* in, float* out, float* post, int len) {
 
   if (start + BLOCK_SIZE + t < len) scan_array[BLOCK_SIZE + t] = in[start + BLOCK_SIZE + t];
   else scan_array[BLOCK_SIZE + t] = 0;
-  // __syncthreads();
 
   for (unsigned int stride = 1; stride <= BLOCK_SIZE; stride <<= 1) {
      index = (t + 1) * stride * 2 - 1;

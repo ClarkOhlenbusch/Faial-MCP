@@ -13,8 +13,6 @@ __global__ void prefixSum(int *input, int *output, int n) {
         temp[tid] = input[tid];
     }
 
-    // __syncthreads();
-
     // Perform inclusive scan
     for (int stride = 1; stride < blockDim.x; stride *= 2) {
         int val = 0;

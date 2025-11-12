@@ -59,8 +59,6 @@ matrixMulCUDA(float *C, float *A, float *B, int wA, int wB)
         As[ty][tx] = A[a + wA * ty + tx];
         Bs[ty][tx] = B[b + wB * ty + tx];
 
-        // Synchronize to make sure the matrices are loaded
-        // __syncthreads();
 
         // Multiply the two matrices together;
         // each thread computes one element

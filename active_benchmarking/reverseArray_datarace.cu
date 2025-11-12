@@ -14,7 +14,6 @@ __global__ void reverseArray(int *input, int *output, int n) {
         temp[tid] = input[tid];
     }
 
-    // __syncthreads();
 
     // Write reversed data to output
     if (reversedIdx < n) {

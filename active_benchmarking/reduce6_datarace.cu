@@ -37,7 +37,6 @@ reduce6(T *g_idata, T *g_odata, unsigned int n)
 
     // each thread puts its local sum into shared memory
     sdata[tid] = mySum;
-    // __syncthreads();
 
 
     // do reduction in shared mem

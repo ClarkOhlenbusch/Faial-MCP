@@ -61,7 +61,6 @@ __global__ void convolution(float* I, const float* __restrict__ M, float* P,
       else
         tmp[destinationY][destinationX] = 0;
 
-    // __syncthreads();
 
     acc = 0;
     #pragma unroll

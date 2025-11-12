@@ -9,9 +9,6 @@ __global__ void sharedMemoryExample(int *output) {
     // Write to shared memory
     shared_data[tid] = tid;
     
-    // Potential race: missing __syncthreads()
-    // Uncomment the next line to fix:
-    // __syncthreads();
     
     // Read from shared memory
     if (tid > 0) {

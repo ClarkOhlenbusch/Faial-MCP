@@ -24,7 +24,6 @@ reduce5(T *g_idata, T *g_odata, unsigned int n)
         mySum += g_idata[i+blockSize];
 
     sdata[tid] = mySum;
-    // __syncthreads();
 
     // do reduction in shared mem
     if (blockSize >= 512)

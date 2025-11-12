@@ -58,7 +58,6 @@ __global__ void histogram256Kernel(uint *d_PartialHistograms, uint *d_Data, uint
     //Cycle through the entire data set, update subhistograms for each warp
     const uint tag = threadIdx.x << (UINT_BITS - LOG2_WARP_SIZE);
 
-    // __syncthreads();
 
     for (uint pos = UMAD(blockIdx.x, blockDim.x, threadIdx.x); pos < dataCount; pos += UMUL(blockDim.x, gridDim.x))
     {

@@ -60,7 +60,6 @@ __global__ void convolutionRowsKernel(
     }
 
     //Compute and store results
-    // __syncthreads();
 #pragma unroll
 
     for (int i = ROWS_HALO_STEPS;

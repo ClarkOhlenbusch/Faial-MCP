@@ -29,7 +29,6 @@ dwtHaar1D(float *id, float *od, float *approx_final,
     // read data from global memory
     shared[tid] = id[idata];
     shared[tid + bdim] = id[idata + bdim];
-    // __syncthreads();
 
     // this operation has a two way bank conflicts for all threads, this are two
     // additional cycles for each warp -- all alternatives to avoid this bank

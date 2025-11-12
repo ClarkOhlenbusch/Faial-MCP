@@ -84,7 +84,6 @@ __global__ void scalarProdGPU(
             __global_invariant(__implies(ENABLED_OUTER & !ENABLED_INNER & __read(accumResult), (__read_offset(accumResult)/sizeof(float) == 0) | (__read_offset(accumResult)/sizeof(float) == 1))),
             stride > 0; stride >>= 1)
         {
-            // __syncthreads();
 
             for (int iAccum = threadIdx.x;
                  __global_invariant(__implies(__same_group & ((threadIdx.x/32) == (__other_int(threadIdx.x)/32)), __no_read(accumResult))),

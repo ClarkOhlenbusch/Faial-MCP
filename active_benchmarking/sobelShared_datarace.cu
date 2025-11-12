@@ -76,7 +76,6 @@ SobelShared(uchar4 *pSobelOriginal, unsigned short SobelPitch,
         }
     }
 
-    // __syncthreads();
 
     u >>= 2;    // index as uchar4 from here
     uchar4 *pSobel = (uchar4 *)(((char *) pSobelOriginal)+v*SobelPitch);

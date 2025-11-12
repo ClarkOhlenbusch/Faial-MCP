@@ -48,8 +48,6 @@ __global__ void NLM2(
         //Write the result to shared memory
         fWeights[threadIdx.y * BLOCKDIM_X + threadIdx.x] = weight;
         //Wait until all the weights are ready
-        // __syncthreads();
-
 
         //Normalized counter for the NLM weight threshold
         float fCount = 0;

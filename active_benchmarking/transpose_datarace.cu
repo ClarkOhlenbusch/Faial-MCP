@@ -26,8 +26,6 @@ __global__ void transposeCoalesced(float *odata, float *idata, int width, int he
             tile[threadIdx.y+i][threadIdx.x] = idata[index_in+i*width];
         }
 
-        // __syncthreads();
-
         for (int i=0; i<TILE_DIM; i+=BLOCK_ROWS)
         {
             odata[index_out+i*height] = tile[threadIdx.x][threadIdx.y+i]; /*threadIdx.x*TILE_DIM(16) + threadIdx.y + i*/

@@ -56,7 +56,6 @@ __global__ void BitonicKernel(int * values)
         }
       }
 
-      // __syncthreads();
     }
   }
 
