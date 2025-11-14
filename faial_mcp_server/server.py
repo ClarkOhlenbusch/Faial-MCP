@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from mcp.server.fastmcp import Context, FastMCP
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 # TODO: The following functions and constants are all related to handling environment variables and should be moved to a new file called `env.py`.
 # {{{- env
@@ -39,6 +39,8 @@ INSTRUCTIONS = (
     "\n"
     "- **`source` (required)**: Pass self-contained kernel code directly as a string. Include all necessary type definitions, "
     "macros, and dependencies. Example: `{\"source\": \"__global__ void kernel() { ... }\", \"virtual_filename\": \"test.cu\"}`\n"
+    "- **`macros`**: Provide a dictionary mapping macro names to optional values (e.g., `{\"DEBUG\": \"1\", \"FLAG\": null}`). "
+    "CLI-style strings such as `\"DEBUG 1\"` or `\"FLAG=value\"` are also accepted and automatically normalized.\n"
     "\n"
     "## Critical Requirements\n"
     "- **MANDATORY:** Provide **self-contained, well-formed kernel snippets** - each kernel must be isolated with all dependencies\n"
@@ -123,6 +125,41 @@ class _ServerDefaults(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_inputs(cls, values: Any) -> Any:
+        if not isinstance(values, dict):
+            return values
+
+        if "file_path" in values:
+            raise ValueError(
+                "`file_path` is not supported by the Faial MCP server. "
+                "Provide inline kernel code via the `source` field instead."
+            )
+
+        macros = values.get("macros")
+        if isinstance(macros, list):
+            normalized: Dict[str, Optional[str]] = {}
+            for entry in macros:
+                if isinstance(entry, str):
+                    candidate = entry.strip()
+                    if not candidate:
+                        continue
+                    if "=" in candidate:
+                        name, remainder = candidate.split("=", 1)
+                        normalized[name.strip()] = remainder.strip() or None
+                    else:
+                        parts = candidate.split(None, 1)
+                        name = parts[0]
+                        value = parts[1] if len(parts) > 1 else None
+                        normalized[name.strip()] = value.strip() if value else None
+                elif isinstance(entry, dict):
+                    for key, value in entry.items():
+                        normalized[str(key)] = None if value is None else str(value)
+            values["macros"] = normalized
+
+        return values
+
     source: str = Field(
         description=(
             "MANDATORY: Self-contained kernel source code as a string. Include all necessary type definitions, "
@@ -250,6 +287,14 @@ class AnalyzeResponse(BaseModel):
     stdout_json: Optional[Dict[str, Any]] = None
     stdout_parse_error: Optional[str] = None
     kernel_summaries: List[KernelSummary] = Field(default_factory=list)
+    human_readable_summary: Optional[str] = Field(
+        default=None,
+        description=(
+            "Concise, agent-friendly status summary. Each line follows "
+            "`kernel=<name>;status=<status>;errors=<count>;unknowns=<count>;notes=<tags>` "
+            "or a single `stderr_summary=...` entry when no kernels parsed."
+        ),
+    )
 # }}}
 
 
@@ -348,6 +393,44 @@ def _summaries_from_payload(payload: Dict[str, Any]) -> List[KernelSummary]:
     return summaries
 
 
+def _format_human_summary(
+    summaries: List[KernelSummary], stderr_text: str, max_lines: int = 3
+) -> Optional[str]:
+    if summaries:
+        lines: List[str] = []
+        for summary in summaries:
+            notes = []
+            if summary.error_count:
+                notes.append("counterexamples")
+            if summary.unknown_count:
+                notes.append("unknown_obligations")
+            if not notes:
+                notes.append("no_issues")
+            lines.append(
+                "kernel={name};status={status};errors={errors};unknowns={unknowns};notes={notes}".format(
+                    name=summary.kernel_name or "<unnamed>",
+                    status=summary.status.lower(),
+                    errors=summary.error_count,
+                    unknowns=summary.unknown_count,
+                    notes=",".join(notes),
+                )
+            )
+        return "\n".join(lines)
+
+    stderr_lines = [line.strip() for line in stderr_text.strip().splitlines() if line.strip()]
+    if not stderr_lines:
+        return None
+
+    truncated = False
+    if len(stderr_lines) > max_lines:
+        stderr_lines = stderr_lines[:max_lines]
+        truncated = True
+    summary = " | ".join(stderr_lines)
+    if truncated:
+        summary += " | ..."
+    return f"stderr_summary={summary}"
+
+
 async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) -> AnalyzeResponse:
     defaults = _ServerDefaults.load()
     executable_path = request.faial_executable or defaults.faial_executable
@@ -437,6 +520,7 @@ async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) 
 
         payload, parse_error = _parse_stdout(stdout_text)
         summaries = _summaries_from_payload(payload) if payload else []
+        human_summary = _format_human_summary(summaries, stderr_text)
 
         if ctx is not None:
             status_fragments = ", ".join(
@@ -448,6 +532,8 @@ async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) 
             if status_fragments:
                 summary_message += f" Kernels: {status_fragments}."
             await ctx.info(summary_message)
+            if human_summary:
+                await ctx.info(f"Summary:\n{human_summary}")
             if parse_error:
                 await ctx.warning(parse_error)
             if timed_out:
@@ -465,6 +551,7 @@ async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) 
             stdout_json=payload,
             stdout_parse_error=parse_error,
             kernel_summaries=summaries,
+            human_readable_summary=human_summary,
         )
         return response
     finally:
@@ -497,12 +584,20 @@ def create_server(*, host: Optional[str] = None, port: Optional[int] = None) -> 
     )
     async def analyze_kernel(request: dict, ctx: Optional[Context] = None) -> AnalyzeResponse:
         # Handle both wrapped {"request": {...}} and flattened {...} parameter formats for compatibility
-        if "request" in request:
-            # Standard MCP format
-            req_obj = AnalyzeRequest(**request["request"])
-        else:
-            # Flattened format (compatibility)
-            req_obj = AnalyzeRequest(**request)
+        try:
+            if "request" in request:
+                # Standard MCP format
+                req_obj = AnalyzeRequest(**request["request"])
+            else:
+                # Flattened format (compatibility)
+                req_obj = AnalyzeRequest(**request)
+        except ValidationError as exc:
+            pieces = []
+            for error in exc.errors():
+                location = ".".join(str(part) for part in error.get("loc", ())) or "input"
+                pieces.append(f"{location}: {error.get('msg')}")
+            message = "; ".join(pieces) or "Invalid analyze_kernel request."
+            raise ValueError(message) from exc
 
         # DEBUG: Log incoming request parameters
         import json

@@ -88,7 +88,37 @@ Each tool invocation can override the executable, helper paths, working director
 
 ### `analyze_kernel`
 
-Runs Faial's data-race freedom analysis (`faial-drf`) against a CUDA or WGSL kernel. Supply either `file_path` (server-relative path) or inline `source`. Optional fields map to the CLI flags exposed by Faial (include directories, macros, kernel selection, etc.). The response includes the raw stdout/stderr, parsed JSON payload, timing data, and kernel-level summaries extracted from Faial's JSON UI output.
+Runs Faial's data-race freedom analysis (`faial-drf`) against a CUDA or WGSL kernel. **All requests must provide kernel source inline via the `source` field.** File-path based submissions are not supported because the server writes each request to an isolated temporary file before calling `faial-drf`.
+
+Key arguments:
+
+- `source` (required): Self-contained kernel snippet as a string. Include any helper functions, structs, constants, and macros so the kernel can compile without additional files.
+- `virtual_filename`: Logical filename (e.g., `my_kernel.cu`) to control the extension recorded in logs.
+- `include_dirs`: List of directories to forward via `-I`. Useful when a kernel legitimately depends on headers you can mount into the server's workspace.
+- `macros`: Dictionary of macro definitions (`{"DEBUG": "1", "USE_FAST": null}`) that becomes `-D` flags. Values are optional; use `null` for flag-style macros. CLI-style strings such as `"DEBUG 1"` or `"USE_FAST=value"` are also accepted and normalized automatically.
+- Other CLI-mirrored switches: `params`, `block_dim`, `grid_dim`, `only_kernel`, `only_array`, `logic`, `timeout_ms`, `find_true_data_races`, `grid_level`, `all_levels`, `all_dims`, `unreachable`, `ignore_parsing_errors`, and `extra_args`.
+
+Example request payload:
+
+```json
+{
+  "name": "analyze_kernel",
+  "arguments": {
+    "source": "__global__ void saxpy(int n, float a, float *x, float *y) { int i = blockIdx.x * blockDim.x + threadIdx.x; if (i < n) { y[i] = a * x[i] + y[i]; } }",
+    "virtual_filename": "saxpy.cu",
+    "macros": {
+      "RADIUS": "1",
+      "LocalBlock": "extern __shared__ unsigned char LocalBlock[]"
+    },
+    "include_dirs": ["/workspace/includes"],
+    "block_dim": "[16,4,1]",
+    "grid_dim": "[2,128,1]",
+    "ignore_parsing_errors": true
+  }
+}
+```
+
+The response includes Faial's stdout/stderr, parsed JSON output, timing data, per-kernel status summaries, and a concise `human_readable_summary` tailored for LLMs. Each line follows `kernel=<name>;status=<status>;errors=<count>;unknowns=<count>;notes=<tags>`, or `stderr_summary=...` when Faial couldn't parse any kernels.
 
 ---
 

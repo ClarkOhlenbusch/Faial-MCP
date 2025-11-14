@@ -1,4 +1,3 @@
-// Difficulty: 6
 #include <wb.h>
 
 #define wbCheck(stmt) do {                                 \
@@ -32,11 +31,12 @@ __global__ void convolution(float* I, const float* __restrict__ M, float* P,
 
   float acc;
   int sourceY, sourceX;
-  unsigned int source, destination, destinationY, destinationX;
+  unsigned int source, destination;
   unsigned int y = blockIdx.y * TILE_WIDTH + threadIdx.y;
   unsigned int x = blockIdx.x * TILE_WIDTH + threadIdx.x;
 
   for (unsigned int k = 0; k < channels; k++) {
+    unsigned int destinationY, destinationX;
     destination = threadIdx.y * TILE_WIDTH + threadIdx.x;
     setIndexes(destination,
                destinationX,
@@ -48,19 +48,23 @@ __global__ void convolution(float* I, const float* __restrict__ M, float* P,
     else
       tmp[destinationY][destinationX] = 0;
 
+    __syncthreads();
+
+    unsigned int destinationY2, destinationX2;
     destination = threadIdx.y * TILE_WIDTH + threadIdx.x + TILE_WIDTH * TILE_WIDTH;
     setIndexes(destination,
-               destinationX,
-               destinationY,
+               destinationX2,
+               destinationY2,
                sourceX, sourceY);
     source = (sourceY * width + sourceX) * channels + k;
 
-    if (destinationY < AREA)
+    if (destinationY2 < AREA)
       if (sourceY >= 0 && sourceY < height && sourceX >= 0 && sourceX < width)
-        tmp[destinationY][destinationX] = I[source];
+        tmp[destinationY2][destinationX2] = I[source];
       else
-        tmp[destinationY][destinationX] = 0;
+        tmp[destinationY2][destinationX2] = 0;
 
+    __syncthreads();
 
     acc = 0;
     #pragma unroll

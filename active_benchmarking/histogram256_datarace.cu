@@ -4,7 +4,7 @@
 
 #include "common.h"
 
-#define USE_SMEM_ATOMICS 1
+#define USE_SMEM_ATOMICS 0
 
 #if(!USE_SMEM_ATOMICS)
 #define TAG_MASK ( (1U << (UINT_BITS - LOG2_WARP_SIZE)) - 1U )
@@ -55,6 +55,8 @@ __global__ void histogram256Kernel(uint *d_PartialHistograms, uint *d_Data, uint
         s_Hist[threadIdx.x + i * HISTOGRAM256_THREADBLOCK_SIZE] = 0;
     }
 
+    __syncthreads();
+
     //Cycle through the entire data set, update subhistograms for each warp
     const uint tag = threadIdx.x << (UINT_BITS - LOG2_WARP_SIZE);
 
@@ -66,7 +68,6 @@ __global__ void histogram256Kernel(uint *d_PartialHistograms, uint *d_Data, uint
     }
 
     //Merge per-warp histograms into per-block and write to global memory
-    __syncthreads();
 
     for (uint bin = threadIdx.x;
          __global_invariant(bin % blockDim.x == threadIdx.x),

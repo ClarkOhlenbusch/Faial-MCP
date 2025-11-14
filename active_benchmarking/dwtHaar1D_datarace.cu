@@ -29,13 +29,13 @@ dwtHaar1D(float *id, float *od, float *approx_final,
     // read data from global memory
     shared[tid] = id[idata];
     shared[tid + bdim] = id[idata + bdim];
+    __syncthreads();
 
     // this operation has a two way bank conflicts for all threads, this are two
     // additional cycles for each warp -- all alternatives to avoid this bank
     // conflict are more expensive than the one cycle introduced by serialization
     float data0 = shared[2*tid];
     float data1 = shared[(2*tid) + 1];
-    __syncthreads();
 
     // detail coefficient, not further referenced so directly store in
     // global memory
@@ -49,10 +49,6 @@ dwtHaar1D(float *id, float *od, float *approx_final,
     // store in shared memory for further decomposition steps in this global step
     shared[atid] = (data0 + data1) * INV_SQRT_2;
 
-    // all threads have to write approximation coefficient to shared memory before
-    // next steps can take place
-    __syncthreads();
-
     // early out if possible
     // the compiler removes this part from the source because dlevels is
     // a constant shader input
@@ -61,6 +57,8 @@ dwtHaar1D(float *id, float *od, float *approx_final,
     // this case
     if (dlevels > 1)
     {
+        __syncthreads();
+
         // offset to second element in shared element which has to be used for the
         // decomposition, effectively 2^(i - 1)
         unsigned int offset_neighbor = 1;
@@ -116,15 +114,15 @@ dwtHaar1D(float *id, float *od, float *approx_final,
                 // detail_1, ...)
                 // is achieved
                 shared[c_idata0] = (shared[c_idata0] + shared[c_idata1]) * INV_SQRT_2;
-
-                // update storage offset for details
-                num_threads = num_threads >> 1;   // div 2
-                offset_neighbor <<= 1;   // mul 2
-                idata0 = idata0 << 1;   // mul 2
             }
 
             // sync after each decomposition step
             __syncthreads();
+
+            // update storage offset for details (needs to be done by all threads consistently)
+            num_threads = num_threads >> 1;   // div 2
+            offset_neighbor <<= 1;   // mul 2
+            idata0 = idata0 << 1;   // mul 2
         }
 
         // write the top most level element for the next decomposition steps
