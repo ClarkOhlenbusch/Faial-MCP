@@ -1,114 +1,67 @@
-//pass
-//--gridDim=64 --blockDim=256 --warp-sync=32
+// Difficulty: 6
+#include <wb.h>
 
-template <class T, unsigned int blockSize, bool nIsPow2> __global__ void reduce6(T *g_idata, T *g_odata, unsigned int n);
-template __global__ void reduce6<int,256,false>(int *g_idata, int *g_odata, unsigned int n);
+#define wbCheck(stmt) do {                                 \
+        cudaError_t err = stmt;                            \
+        if (err != cudaSuccess) {                          \
+            wbLog(ERROR, "Failed to run stmt ", #stmt);    \
+            return -1;                                     \
+        }                                                  \
+    } while(0)
 
-#include "common.h"
+#ifndef BLOCK_SIZE
+# define BLOCK_SIZE 256
+#endif
 
-template <class T, unsigned int blockSize, bool nIsPow2>
-__global__ void
-reduce6(T *g_idata, T *g_odata, unsigned int n)
-{
-    T *sdata = SharedMemory<T>();
+#define HALF_BLOCK_SIZE BLOCK_SIZE << 1
 
-    // perform first level of reduction,
-    // reading from global memory, writing to shared memory
-    unsigned int tid = threadIdx.x;
-    unsigned int i = blockIdx.x*blockSize*2 + threadIdx.x;
-    unsigned int gridSize = blockSize*2*gridDim.x;
+#define MEM_SIZE(size)  \
+  size * sizeof(float)
 
-    T mySum = 0;
+__global__ void post_scan(float* in, float* add, int len) {
+  unsigned int t = threadIdx.x;
+  unsigned int start = 2 * blockIdx.x * BLOCK_SIZE;
 
-    // we reduce multiple elements per thread.  The number is determined by the
-    // number of active thread blocks (via gridDim).  More blocks will result
-    // in a larger gridSize and therefore fewer elements per thread
-    while (i < n)
-    {
-        mySum += g_idata[i];
+  if (blockIdx.x) {
+     if (start + t < len) in[start + t] += add[blockIdx.x - 1];
+     if (start + BLOCK_SIZE + t < len) in[start + BLOCK_SIZE + t] += add[blockIdx.x - 1];
+  }
+}
 
-        // ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
-        if (nIsPow2 || i + blockSize < n)
-            mySum += g_idata[i+blockSize];
+__global__ void scan(float* in, float* out, float* post, int len) {
+  __shared__ float scan_array[HALF_BLOCK_SIZE];
+  unsigned int t = threadIdx.x;
+  unsigned int start = 2 * blockIdx.x * BLOCK_SIZE;
+  int index;
 
-        i += gridSize;
-    }
+  if (t < BLOCK_SIZE) {
+    if (start + t < len) scan_array[t] = in[start + t];
+    else scan_array[t] = 0;
 
-    // each thread puts its local sum into shared memory
-    sdata[tid] = mySum;
-    // __syncthreads(); // DATA RACE: Missing syncthreads causes threads to read uninitialized shared memory in reduction loop
+    if (start + BLOCK_SIZE + t < len) scan_array[BLOCK_SIZE + t] = in[start + BLOCK_SIZE + t];
+    else scan_array[BLOCK_SIZE + t] = 0;
+  }
 
+  // __syncthreads(); Bug injected here
 
-    // do reduction in shared mem
-    if (blockSize >= 512)
-    {
-        if (tid < 256)
-        {
-            sdata[tid] = mySum = mySum + sdata[tid + 256];
-        }
+  for (unsigned int stride = 1; stride <= BLOCK_SIZE; stride <<= 1) {
+     if (t < BLOCK_SIZE) {
+       index = (t + 1) * stride * 2 - 1;
+       if (index < 2 * BLOCK_SIZE) scan_array[index] += scan_array[index - stride];
+     }
+     __syncthreads();
+  }
 
-        __syncthreads();
-    }
+  for (unsigned int stride = BLOCK_SIZE >> 1; stride; stride >>= 1) {
+     if (t < BLOCK_SIZE) {
+       index = (t + 1) * stride * 2 - 1;
+       if (index + stride < 2 * BLOCK_SIZE) scan_array[index + stride] += scan_array[index];
+     }
+     __syncthreads();
+  }
 
-    if (blockSize >= 256)
-    {
-        if (tid < 128)
-        {
-            sdata[tid] = mySum = mySum + sdata[tid + 128];
-        }
+  if (start + t < len && t < BLOCK_SIZE) out[start + t] = scan_array[t];
+  if (start + BLOCK_SIZE + t < len && t < BLOCK_SIZE) out[start + BLOCK_SIZE + t] = scan_array[BLOCK_SIZE + t];
 
-        __syncthreads();
-    }
-
-    if (blockSize >= 128)
-    {
-        if (tid <  64)
-        {
-            sdata[tid] = mySum = mySum + sdata[tid +  64];
-        }
-
-        __syncthreads();
-    }
-
-    if (tid < 32)
-    {
-        // now that we are using warp-synchronous programming (below)
-        // we need to declare our shared memory volatile so that the compiler
-        // doesn't reorder stores to it and induce incorrect behavior.
-        T *smem = sdata;
-
-        if (blockSize >=  64)
-        {
-            smem[tid] = mySum = mySum + smem[tid + 32];
-        }
-
-        if (blockSize >=  32)
-        {
-            smem[tid] = mySum = mySum + smem[tid + 16];
-        }
-
-        if (blockSize >=  16)
-        {
-            smem[tid] = mySum = mySum + smem[tid +  8];
-        }
-
-        if (blockSize >=   8)
-        {
-            smem[tid] = mySum = mySum + smem[tid +  4];
-        }
-
-        if (blockSize >=   4)
-        {
-            smem[tid] = mySum = mySum + smem[tid +  2];
-        }
-
-        if (blockSize >=   2)
-        {
-            smem[tid] = mySum = mySum + smem[tid +  1];
-        }
-    }
-
-    // write result for this block to global mem
-    if (tid == 0)
-        g_odata[blockIdx.x] = sdata[0];
+  if (post && t == 0) post[blockIdx.x] = scan_array[2 * BLOCK_SIZE - 1];
 }

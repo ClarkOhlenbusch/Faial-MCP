@@ -94,8 +94,20 @@ Key arguments:
 
 - `source` (required): Self-contained kernel snippet as a string. Include any helper functions, structs, constants, and macros so the kernel can compile without additional files.
 - `virtual_filename`: Logical filename (e.g., `my_kernel.cu`) to control the extension recorded in logs.
-- `include_dirs`: List of directories to forward via `-I`. Useful when a kernel legitimately depends on headers you can mount into the server's workspace.
+- `include_dirs`: List of directories to forward via `-I`. Useful when a kernel legitimately depends on
+  headers you can mount into the server's workspace. Paths are resolved relative to `working_directory`
+  (default: the server's current working directory), so provide absolute paths or set
+  `working_directory` when referencing mounted files.
 - `macros`: Dictionary of macro definitions (`{"DEBUG": "1", "USE_FAST": null}`) that becomes `-D` flags. Values are optional; use `null` for flag-style macros. CLI-style strings such as `"DEBUG 1"` or `"USE_FAST=value"` are also accepted and normalized automatically.
+- `working_directory`: Directory in which to run `faial-drf`. This also controls how relative include
+  paths and helper binaries are resolved. Defaults to the server's launch directory.
+- `include_raw_output`: Set to `true` when you need the complete stdout/stderr/JSON payload from Faial.
+  By default, the MCP response only includes concise summaries and short excerpts to keep payloads
+  small.
+- `params`, `block_dim`, `grid_dim`, `only_kernel`, `only_array`, `logic`, `timeout_ms`,
+  `find_true_data_races`, `grid_level`, `all_levels`, `all_dims`, `unreachable`, `ignore_parsing_errors`,
+  and `extra_args`: One-to-one mirrors of Faial CLI flags.
+- `environment`: Extra environment variables to set when invoking `faial-drf` (string values only).
 - Other CLI-mirrored switches: `params`, `block_dim`, `grid_dim`, `only_kernel`, `only_array`, `logic`, `timeout_ms`, `find_true_data_races`, `grid_level`, `all_levels`, `all_dims`, `unreachable`, `ignore_parsing_errors`, and `extra_args`.
 
 Example request payload:
@@ -119,6 +131,18 @@ Example request payload:
 ```
 
 The response includes Faial's stdout/stderr, parsed JSON output, timing data, per-kernel status summaries, and a concise `human_readable_summary` tailored for LLMs. Each line follows `kernel=<name>;status=<status>;errors=<count>;unknowns=<count>;notes=<tags>`, or `stderr_summary=...` when Faial couldn't parse any kernels.
+
+### Kernel Extraction Helper
+
+Use the built-in helper to extract a kernel snippet and prepare a ready-to-send payload:
+
+```bash
+faial-mcp-server extract active_benchmarking/reverseArray_datarace.cu --kernel reverseArray --json
+```
+
+This command locates the requested `__global__` function, prints the kernel source (or emits JSON with
+`--json`), and replays any launch hints embedded in comments like `//--blockDim=256 --gridDim=1`. Set
+`--virtual-filename` if you need a custom logical filename in the output payload.
 
 ---
 

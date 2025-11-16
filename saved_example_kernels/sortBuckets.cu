@@ -1,3 +1,4 @@
+// Difficulty: 6
 //pass
 //--blockDim=1024 --gridDim=1024
 // SOURCE: https://github.com/openmm/openmm/commit/9abaa587caf25b801b231fdd65bb58d9d662cead?diff=split?diff=split
@@ -46,7 +47,7 @@ __global__ void sortBuckets(DATA_TYPE* __restrict__ data, const DATA_TYPE* __res
 
             if (threadIdx.x < length)
                 data[startIndex+threadIdx.x] = dataBuffer[threadIdx.x];
-            __syncthreads(); // <--- comment to trigger BUG
+            // __syncthreads(); // <--- comment to trigger BUG
         }
         else {
             // Copy the bucket data over to the output array.

@@ -9,8 +9,10 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import shlex
 import shutil
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -27,6 +29,8 @@ DEFAULT_TIMEOUT_ENV = "FAIAL_MCP_TIMEOUT_MS"
 DEFAULT_TRANSPORT_ENV = "FAIAL_MCP_TRANSPORT"
 DEFAULT_HOST_ENV = "FAIAL_MCP_HOST"
 DEFAULT_PORT_ENV = "FAIAL_MCP_PORT"
+DEBUG_REQUESTS_ENV = "FAIAL_MCP_DEBUG_REQUESTS"
+EXTRACT_COMMAND = "extract"
 # }}}
 
 
@@ -38,7 +42,8 @@ INSTRUCTIONS = (
     "container-compatible analysis and proper input preparation.\n"
     "\n"
     "- **`source` (required)**: Pass self-contained kernel code directly as a string. Include all necessary type definitions, "
-    "macros, and dependencies. Example: `{\"source\": \"__global__ void kernel() { ... }\", \"virtual_filename\": \"test.cu\"}`\n"
+    "macros, and dependencies. Do not reference host-only globals or headers that are not provided via the request." 
+    " Example: `{\"source\": \"__global__ void kernel() { ... }\", \"virtual_filename\": \"test.cu\"}`\n"
     "- **`macros`**: Provide a dictionary mapping macro names to optional values (e.g., `{\"DEBUG\": \"1\", \"FLAG\": null}`). "
     "CLI-style strings such as `\"DEBUG 1\"` or `\"FLAG=value\"` are also accepted and automatically normalized.\n"
     "\n"
@@ -46,19 +51,45 @@ INSTRUCTIONS = (
     "- **MANDATORY:** Provide **self-contained, well-formed kernel snippets** - each kernel must be isolated with all dependencies\n"
     "- **MANDATORY:** Include all necessary type definitions, structs, constants, and macros within the source\n"
     "- **MANDATORY:** Avoid full-file dumps - analyze individual kernels separately to prevent false positives\n"
-    "- Use `include_dirs` and `macros` to resolve external dependencies when needed\n"
+    "- Use `include_dirs` and `macros` to resolve external dependencies when needed."
+    " `include_dirs` are resolved relative to `working_directory` (defaults to the server's current"
+    " directory), so provide absolute paths or set `working_directory` when referencing mounted"
+    " headers.\n"
+    "- Use `working_directory` to point Faial at the root containing headers and helper binaries"
+    " (default: server launch directory).\n"
     "- Use `ignore_parsing_errors` flag sparingly for partial code analysis\n"
+    "\n"
+    "## Example Snippets\n"
+    "- **Good:** Self-contained code with helper types/macros.\n"
+    "```cuda\n"
+    "#define TILE 128\n"
+    "struct Pair { float a; float b; };\n"
+    "__device__ inline float add_pair(Pair p) { return p.a + p.b; }\n"
+    "__global__ void sum_pairs(Pair *data, float *out, int n) {\n"
+    "    int i = blockIdx.x * blockDim.x + threadIdx.x;\n"
+    "    if (i < n) { out[i] = add_pair(data[i]); }\n"
+    "}\n"
+    "```\n"
+    "- **Bad:** References undefined helpers or host-only globals.\n"
+    "```cuda\n"
+    "__global__ void sum_pairs(Pair *data) {\n"
+    "    out[idx] = add_pair(data[idx]);  // Pair, add_pair, out undefined\n"
+    "}\n"
+    "```\n"
     "\n"
     "## Configuration Parameters\n"
     "Optional fields mirror CLI flags: `include_dirs`, `macros`, `params`, `block_dim`, "
     "`grid_dim`, `only_kernel`, `only_array`, `timeout_ms`, `ignore_parsing_errors`, "
     "`find_true_data_races`, `grid_level`, `all_levels`, `all_dims`, `unreachable`, and `extra_args`.\n"
+    "- **Output control:** Responses default to concise summaries plus short excerpts. Set"
+    " `include_raw_output=true` to receive the full stdout/stderr/JSON payload when needed.\n"
     "\n"
     "## Agent Preparation Guidelines\n"
     "- **Isolate each kernel:** Extract individual kernels from source files\n"
     "- **Resolve dependencies:** Include all required types, constants, and function declarations\n"
     "- **Avoid cross-contamination:** Never analyze multiple unrelated kernels together\n"
-    "- **Test incrementally:** Start with minimal, well-formed kernels before complex analysis"
+    "- **Test incrementally:** Start with minimal, well-formed kernels before complex analysis\n"
+    "- **Use helper tooling:** Run `faial-mcp-server extract <file> --kernel <name> --json` to generate ready-to-send payloads."
 )
 
 # TODO: The following functions are all related to handling environment variables and should be moved to a new file called `env.py`.
@@ -83,6 +114,18 @@ def _env_int(var: str) -> Optional[int]:
 def _env_str(var: str, default: str) -> str:
     value = os.environ.get(var)
     return value if value else default
+
+
+def _env_bool(var: str, default: bool = False) -> bool:
+    value = os.environ.get(var)
+    if value is None:
+        return default
+    lowered = value.strip().lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    return default
 # }}}
 
 
@@ -106,6 +149,249 @@ def _resolve_executable(candidate: Path | str) -> str:
     if found:
         return found
     raise FileNotFoundError(f"Could not find executable: {candidate}")
+
+
+def _truncate_text(text: str, limit: int = 2000) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+# }}}
+
+
+
+# Extraction helpers
+# {{{- extract
+def _normalize_dim_hint(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        return cleaned
+    if cleaned.startswith("[") and cleaned.endswith("]"):
+        return cleaned
+
+    tokens = re.split(r"[xX,\s]+", cleaned)
+    tokens = [token for token in tokens if token]
+    if not tokens:
+        return cleaned
+    if all(token.isdigit() for token in tokens):
+        while len(tokens) < 3:
+            tokens.append("1")
+        tokens = tokens[:3]
+        return f"[{tokens[0]},{tokens[1]},{tokens[2]}]"
+    return cleaned
+
+
+def _parse_launch_hints(text: str) -> Dict[str, str]:
+    hints: Dict[str, str] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("//--"):
+            continue
+        payload = stripped[2:].strip()
+        for chunk in payload.split():
+            entry = chunk.strip()
+            if not entry:
+                continue
+            if entry.startswith("--"):
+                entry = entry[2:]
+            if "=" not in entry:
+                continue
+            key, value = entry.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if not key or not value:
+                continue
+            normalized_key = key.lower()
+            if normalized_key == "blockdim" and "block_dim" not in hints:
+                hints["block_dim"] = _normalize_dim_hint(value)
+            elif normalized_key == "griddim" and "grid_dim" not in hints:
+                hints["grid_dim"] = _normalize_dim_hint(value)
+    return hints
+
+
+def _line_start_index(text: str, index: int) -> int:
+    newline = text.rfind("\n", 0, index)
+    return newline + 1 if newline != -1 else 0
+
+
+def _skip_string(text: str, start_index: int, quote: str) -> int:
+    i = start_index + 1
+    escaped = False
+    while i < len(text):
+        char = text[i]
+        if char == "\\" and not escaped:
+            escaped = True
+            i += 1
+            continue
+        if char == quote and not escaped:
+            return i + 1
+        escaped = False
+        i += 1
+    return len(text)
+
+
+def _skip_line_comment(text: str, start_index: int) -> int:
+    newline = text.find("\n", start_index)
+    return len(text) if newline == -1 else newline + 1
+
+
+def _skip_block_comment(text: str, start_index: int) -> int:
+    end = text.find("*/", start_index + 2)
+    return len(text) if end == -1 else end + 2
+
+
+def _find_matching_brace(text: str, open_index: int) -> int:
+    depth = 0
+    i = open_index
+    while i < len(text):
+        char = text[i]
+        if char == '{':
+            depth += 1
+            i += 1
+            continue
+        if char == '}':
+            depth -= 1
+            i += 1
+            if depth == 0:
+                return i
+            continue
+        if char == '"':
+            i = _skip_string(text, i, '"')
+            continue
+        if char == "'":
+            i = _skip_string(text, i, "'")
+            continue
+        if char == '/' and i + 1 < len(text):
+            next_char = text[i + 1]
+            if next_char == '/':
+                i = _skip_line_comment(text, i)
+                continue
+            if next_char == '*':
+                i = _skip_block_comment(text, i)
+                continue
+        i += 1
+    raise ValueError("Unmatched braces in kernel definition")
+
+
+def _collect_kernel_snippets(text: str) -> List[Dict[str, Any]]:
+    kernels: List[Dict[str, Any]] = []
+    search_pos = 0
+    while True:
+        idx = text.find("__global__", search_pos)
+        if idx == -1:
+            break
+        search_pos = idx + len("__global__")
+        brace_idx = text.find("{", idx)
+        if brace_idx == -1:
+            break
+        header = text[idx:brace_idx]
+        param_start = header.rfind("(")
+        if param_start == -1:
+            continue
+        before_param = header[:param_start]
+        name_match = re.search(r"([A-Za-z_][\w]*)\s*$", before_param)
+        if not name_match:
+            continue
+        kernel_name = name_match.group(1)
+        start = _line_start_index(text, idx)
+        try:
+            end = _find_matching_brace(text, brace_idx)
+        except ValueError:
+            continue
+        snippet = text[start:end].rstrip() + "\n"
+        line_number = text.count("\n", 0, start) + 1
+        kernels.append({
+            "name": kernel_name,
+            "source": snippet,
+            "line": line_number,
+        })
+    return kernels
+
+
+def _run_extract_command(argv: List[str]) -> None:
+    parser = argparse.ArgumentParser(
+        prog=f"faial-mcp-server {EXTRACT_COMMAND}",
+        description="Extract a __global__ kernel from a CUDA file and emit a ready-to-use payload.",
+    )
+    parser.add_argument("file", type=Path, help="Path to the CUDA source file")
+    parser.add_argument(
+        "-k",
+        "--kernel",
+        help="Kernel name to extract (required when multiple kernels exist).",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit only the analyze_kernel arguments as JSON.",
+    )
+    parser.add_argument(
+        "--virtual-filename",
+        help="Override the virtual_filename used in the output payload (defaults to the source filename).",
+    )
+    args = parser.parse_args(argv)
+
+    file_path = args.file.expanduser()
+    if not file_path.is_file():
+        parser.error(f"File not found: {file_path}")
+
+    text = file_path.read_text(encoding="utf-8")
+    kernels = _collect_kernel_snippets(text)
+    if not kernels:
+        parser.error("No __global__ kernels found in the supplied file.")
+
+    selected: Optional[Dict[str, Any]] = None
+    if args.kernel:
+        for entry in kernels:
+            if entry["name"] == args.kernel:
+                selected = entry
+                break
+        if selected is None:
+            available = ", ".join(kernel["name"] for kernel in kernels)
+            parser.error(f"Kernel '{args.kernel}' not found. Available kernels: {available}")
+    else:
+        if len(kernels) > 1:
+            available = ", ".join(kernel["name"] for kernel in kernels)
+            parser.error(
+                "Multiple kernels detected. Specify --kernel to choose one. Available kernels: "
+                f"{available}"
+            )
+        selected = kernels[0]
+
+    assert selected is not None
+    hints = _parse_launch_hints(text)
+    payload: Dict[str, Any] = {
+        "source": selected["source"],
+        "virtual_filename": args.virtual_filename or file_path.name,
+    }
+    if "block_dim" in hints:
+        payload["block_dim"] = hints["block_dim"]
+    if "grid_dim" in hints:
+        payload["grid_dim"] = hints["grid_dim"]
+
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return
+
+    print(
+        f"Kernel '{selected['name']}' (line {selected['line']}) extracted from {file_path}.",
+        file=sys.stdout,
+    )
+    print(selected["source"], end="" if selected["source"].endswith("\n") else "\n", file=sys.stdout)
+    print(file=sys.stdout)
+    if hints:
+        print("Inferred launch hints:", file=sys.stdout)
+        for key, value in hints.items():
+            print(f"  {key}={value}", file=sys.stdout)
+        print(file=sys.stdout)
+    sample_request = {
+        "name": "analyze_kernel",
+        "arguments": payload,
+    }
+    print("Sample analyze_kernel request payload:", file=sys.stdout)
+    print(json.dumps(sample_request, indent=2), file=sys.stdout)
+
+
+def _should_run_extract() -> bool:
+    return len(sys.argv) > 1 and sys.argv[1] == EXTRACT_COMMAND
 # }}}
 
 
@@ -260,6 +546,14 @@ class AnalyzeRequest(BaseModel):
         default_factory=dict,
         description="Extra environment variables to use when invoking faial-drf.",
     )
+    include_raw_output: bool = Field(
+        default=False,
+        description=(
+            "Set to true to include raw stdout/stderr/stdout_json in the response."
+            " By default the server returns only concise summaries plus short excerpts"
+            " to keep payloads small."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_source(self) -> "AnalyzeRequest":
@@ -294,6 +588,14 @@ class AnalyzeResponse(BaseModel):
             "`kernel=<name>;status=<status>;errors=<count>;unknowns=<count>;notes=<tags>` "
             "or a single `stderr_summary=...` entry when no kernels parsed."
         ),
+    )
+    stdout_excerpt: Optional[str] = Field(
+        default=None,
+        description="Truncated stdout preview when summary-only mode suppresses the full text.",
+    )
+    stderr_excerpt: Optional[str] = Field(
+        default=None,
+        description="Truncated stderr preview when summary-only mode suppresses the full text.",
     )
 # }}}
 
@@ -441,6 +743,11 @@ async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) 
 
     cu_to_json = request.cu_to_json if request.cu_to_json is not None else defaults.cu_to_json
     working_directory = request.working_directory.expanduser() if request.working_directory else None
+    include_base = (
+        request.working_directory.expanduser().resolve()
+        if request.working_directory
+        else Path.cwd()
+    )
 
     temp_dir: Optional[tempfile.TemporaryDirectory[str]] = None
     try:
@@ -488,7 +795,7 @@ async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) 
             command.append("--unreachable")
 
         for include_dir in request.include_dirs:
-            include_path = _resolve_with_base(include_dir, working_directory)
+            include_path = _resolve_with_base(include_dir, include_base)
             command.extend(["-I", str(include_path)])
 
         for macro, value in request.macros.items():
@@ -522,6 +829,19 @@ async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) 
         summaries = _summaries_from_payload(payload) if payload else []
         human_summary = _format_human_summary(summaries, stderr_text)
 
+        stdout_excerpt = _truncate_text(stdout_text)
+        stderr_excerpt = _truncate_text(stderr_text)
+        response_stdout_json = None
+        response_stdout = ""
+        response_stderr = ""
+
+        if request.include_raw_output:
+            response_stdout = stdout_text
+            response_stderr = stderr_text
+            response_stdout_json = payload
+            stdout_excerpt = None
+            stderr_excerpt = None
+
         if ctx is not None:
             status_fragments = ", ".join(
                 f"{summary.kernel_name}:{summary.status}" for summary in summaries
@@ -546,12 +866,14 @@ async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) 
             exit_code=exit_code,
             timed_out=timed_out,
             duration_seconds=duration,
-            stdout=stdout_text,
-            stderr=stderr_text,
-            stdout_json=payload,
+            stdout=response_stdout,
+            stderr=response_stderr,
+            stdout_json=response_stdout_json,
             stdout_parse_error=parse_error,
             kernel_summaries=summaries,
             human_readable_summary=human_summary,
+            stdout_excerpt=stdout_excerpt,
+            stderr_excerpt=stderr_excerpt,
         )
         return response
     finally:
@@ -599,15 +921,20 @@ def create_server(*, host: Optional[str] = None, port: Optional[int] = None) -> 
             message = "; ".join(pieces) or "Invalid analyze_kernel request."
             raise ValueError(message) from exc
 
-        # DEBUG: Log incoming request parameters
-        import json
-        print(f"DEBUG: Received request parameters: {json.dumps(req_obj.model_dump(), indent=2)}", file=__import__('sys').stderr)
+        if _env_bool(DEBUG_REQUESTS_ENV):
+            print(
+                f"DEBUG: Received request parameters: {json.dumps(req_obj.model_dump(), indent=2)}",
+                file=sys.stderr,
+            )
         return await _run_analysis(req_obj, ctx)
 
     return server
 
 
 def main() -> None:
+    if _should_run_extract():
+        _run_extract_command(sys.argv[2:])
+        return
     parser = argparse.ArgumentParser(description="Faial MCP server entrypoint")
     parser.add_argument(
         "--transport",

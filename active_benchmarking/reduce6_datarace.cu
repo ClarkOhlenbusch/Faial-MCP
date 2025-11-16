@@ -37,7 +37,7 @@ reduce6(T *g_idata, T *g_odata, unsigned int n)
 
     // each thread puts its local sum into shared memory
     sdata[tid] = mySum;
-
+    __syncthreads();
 
     // do reduction in shared mem
     if (blockSize >= 512)
@@ -66,8 +66,6 @@ reduce6(T *g_idata, T *g_odata, unsigned int n)
         {
             sdata[tid] = mySum = mySum + sdata[tid +  64];
         }
-
-        __syncthreads();
     }
 
     if (tid < 32)
@@ -81,32 +79,39 @@ reduce6(T *g_idata, T *g_odata, unsigned int n)
         {
             smem[tid] = mySum = mySum + smem[tid + 32];
         }
+        __syncthreads();
 
         if (blockSize >=  32)
         {
             smem[tid] = mySum = mySum + smem[tid + 16];
         }
+        __syncthreads();
 
         if (blockSize >=  16)
         {
             smem[tid] = mySum = mySum + smem[tid +  8];
         }
+        __syncthreads();
 
         if (blockSize >=   8)
         {
             smem[tid] = mySum = mySum + smem[tid +  4];
         }
+        __syncthreads();
 
         if (blockSize >=   4)
         {
             smem[tid] = mySum = mySum + smem[tid +  2];
         }
+        __syncthreads();
 
         if (blockSize >=   2)
         {
             smem[tid] = mySum = mySum + smem[tid +  1];
         }
     }
+
+    __syncthreads();
 
     // write result for this block to global mem
     if (tid == 0)
