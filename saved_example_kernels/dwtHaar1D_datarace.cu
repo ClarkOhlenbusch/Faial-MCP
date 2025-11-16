@@ -12,7 +12,7 @@ dwtHaar1D(float *id, float *od, float *approx_final,
 {
     __requires(slength_step_half == 2048);
     __requires(bdim == 512);
-    // shared memory for part of the signal
+    // shared memory for part of the signal - needs to be at least 2*bdim elements
     extern __shared__ float shared[];
 
     // thread runtime environment, 1D parametrization
@@ -20,6 +20,9 @@ dwtHaar1D(float *id, float *od, float *approx_final,
     // const int bdim = blockDim.x;
     const int bid = blockIdx.x;
     const int tid = threadIdx.x;
+
+    __assume(tid >= 0 && tid < bdim);  // constrain thread index
+    __assume(2 * bdim <= 1024);  // shared memory size constraint
 
     // global thread id (w.r.t. to total data set)
     const int tid_global = (bid * bdim) + tid;
@@ -119,12 +122,12 @@ dwtHaar1D(float *id, float *od, float *approx_final,
                 // detail_1, ...)
                 // is achieved
                 shared[c_idata0] = (shared[c_idata0] + shared[c_idata1]) * INV_SQRT_2;
-
-                // update storage offset for details
-                num_threads = num_threads >> 1;   // div 2
-                offset_neighbor <<= 1;   // mul 2
-                idata0 = idata0 << 1;   // mul 2
             }
+
+            // update storage offset for details - MUST be done by ALL threads for consistency
+            num_threads = num_threads >> 1;   // div 2
+            offset_neighbor <<= 1;   // mul 2
+            idata0 = idata0 << 1;   // mul 2
 
             // sync after each decomposition step
             __syncthreads();

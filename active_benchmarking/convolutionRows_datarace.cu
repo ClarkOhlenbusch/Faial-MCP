@@ -26,8 +26,6 @@ __global__ void convolutionRowsKernel(
 )
 {
     __requires(pitch == 3072);
-    __assume(threadIdx.x >= 0 && threadIdx.x < ROWS_BLOCKDIM_X);
-    __assume(threadIdx.y >= 0 && threadIdx.y < ROWS_BLOCKDIM_Y);
     __shared__ float s_Data[ROWS_BLOCKDIM_Y][(ROWS_RESULT_STEPS + 2 * ROWS_HALO_STEPS) * ROWS_BLOCKDIM_X];
 
     //Offset to the left halo edge
@@ -40,11 +38,7 @@ __global__ void convolutionRowsKernel(
     //Load main data
 #pragma unroll
 
-    for (int i = ROWS_HALO_STEPS;
-         __invariant(i >= ROWS_HALO_STEPS),
-         __invariant(i < ROWS_HALO_STEPS + ROWS_RESULT_STEPS),
-         __invariant(__write_implies(s_Data, (__write_offset(s_Data) / sizeof(float)) % (ROWS_RESULT_STEPS + 2 * ROWS_HALO_STEPS) == threadIdx.x % ROWS_BLOCKDIM_X + i * ROWS_BLOCKDIM_X)),
-         i < ROWS_HALO_STEPS + ROWS_RESULT_STEPS; i++)
+    for (int i = ROWS_HALO_STEPS; i < ROWS_HALO_STEPS + ROWS_RESULT_STEPS; i++)
     {
         s_Data[threadIdx.y][threadIdx.x + i * ROWS_BLOCKDIM_X] = d_Src[i * ROWS_BLOCKDIM_X];
     }
@@ -52,11 +46,7 @@ __global__ void convolutionRowsKernel(
     //Load left halo
 #pragma unroll
 
-    for (int i = 0;
-         __invariant(i >= 0),
-         __invariant(i < ROWS_HALO_STEPS),
-         __invariant(__write_implies(s_Data, (__write_offset(s_Data) / sizeof(float)) % (ROWS_RESULT_STEPS + 2 * ROWS_HALO_STEPS) == threadIdx.x % ROWS_BLOCKDIM_X + i * ROWS_BLOCKDIM_X)),
-         i < ROWS_HALO_STEPS; i++)
+    for (int i = 0; i < ROWS_HALO_STEPS; i++)
     {
         s_Data[threadIdx.y][threadIdx.x + i * ROWS_BLOCKDIM_X] = (baseX >= -i * ROWS_BLOCKDIM_X) ? d_Src[i * ROWS_BLOCKDIM_X] : 0;
     }
@@ -64,11 +54,7 @@ __global__ void convolutionRowsKernel(
     //Load right halo
 #pragma unroll
 
-    for (int i = ROWS_HALO_STEPS + ROWS_RESULT_STEPS;
-         __invariant(i >= ROWS_HALO_STEPS + ROWS_RESULT_STEPS),
-         __invariant(i < ROWS_HALO_STEPS + ROWS_RESULT_STEPS + ROWS_HALO_STEPS),
-         __invariant(__write_implies(s_Data, (__write_offset(s_Data) / sizeof(float)) % (ROWS_RESULT_STEPS + 2 * ROWS_HALO_STEPS) == threadIdx.x % ROWS_BLOCKDIM_X + i * ROWS_BLOCKDIM_X)),
-         i < ROWS_HALO_STEPS + ROWS_RESULT_STEPS + ROWS_HALO_STEPS; i++)
+    for (int i = ROWS_HALO_STEPS + ROWS_RESULT_STEPS; i < ROWS_HALO_STEPS + ROWS_RESULT_STEPS + ROWS_HALO_STEPS; i++)
     {
         s_Data[threadIdx.y][threadIdx.x + i * ROWS_BLOCKDIM_X] = (imageW - baseX > i * ROWS_BLOCKDIM_X) ? d_Src[i * ROWS_BLOCKDIM_X] : 0;
     }

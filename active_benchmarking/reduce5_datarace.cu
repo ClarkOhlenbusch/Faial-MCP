@@ -25,8 +25,6 @@ reduce5(T *g_idata, T *g_odata, unsigned int n)
 
     sdata[tid] = mySum;
 
-    __syncthreads();
-
     // do reduction in shared mem
     if (blockSize >= 512)
     {
@@ -63,14 +61,37 @@ reduce5(T *g_idata, T *g_odata, unsigned int n)
         // now that we are using warp-synchronous programming (below)
         // we need to declare our shared memory volatile so that the compiler
         // doesn't reorder stores to it and induce incorrect behavior.
-        volatile T *smem = sdata;
+        T *smem = sdata;
 
-        smem[tid] = mySum = mySum + ((blockSize >=  64) ? smem[tid + 32] : 0);
-        smem[tid] = mySum = mySum + ((blockSize >=  32) ? smem[tid + 16] : 0);
-        smem[tid] = mySum = mySum + ((blockSize >=  16) ? smem[tid +  8] : 0);
-        smem[tid] = mySum = mySum + ((blockSize >=   8) ? smem[tid +  4] : 0);
-        smem[tid] = mySum = mySum + ((blockSize >=   4) ? smem[tid +  2] : 0);
-        smem[tid] = mySum = mySum + ((blockSize >=   2) ? smem[tid +  1] : 0);
+        if (blockSize >=  64)
+        {
+            smem[tid] = mySum = mySum + smem[tid + 32];
+        }
+
+        if (blockSize >=  32)
+        {
+            smem[tid] = mySum = mySum + smem[tid + 16];
+        }
+
+        if (blockSize >=  16)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  8];
+        }
+
+        if (blockSize >=   8)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  4];
+        }
+
+        if (blockSize >=   4)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  2];
+        }
+
+        if (blockSize >=   2)
+        {
+            smem[tid] = mySum = mySum + smem[tid +  1];
+        }
     }
 
     // write result for this block to global mem

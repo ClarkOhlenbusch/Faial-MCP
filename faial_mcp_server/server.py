@@ -87,6 +87,9 @@ INSTRUCTIONS = (
     "## Agent Preparation Guidelines\n"
     "- **Isolate each kernel:** Extract individual kernels from source files\n"
     "- **Resolve dependencies:** Include all required types, constants, and function declarations\n"
+    "- **Surface headers explicitly:** Benchmark kernels often include helper headers such as `common.h`."
+    " Since requests operate on inline `source`, copy the header contents into the snippet or provide"
+    " `include_dirs`/`working_directory` entries that point at those headers so Faial can read them.\n"
     "- **Avoid cross-contamination:** Never analyze multiple unrelated kernels together\n"
     "- **Test incrementally:** Start with minimal, well-formed kernels before complex analysis\n"
     "- **Use helper tooling:** Run `faial-mcp-server extract <file> --kernel <name> --json` to generate ready-to-send payloads."
@@ -733,6 +736,27 @@ def _format_human_summary(
     return f"stderr_summary={summary}"
 
 
+_MISSING_HEADER_PATTERNS = [
+    re.compile(r"fatal error: '([^']+)' file not found", re.IGNORECASE),
+    re.compile(r'fatal error: "([^"]+)" file not found', re.IGNORECASE),
+    re.compile(r"cannot open source file [\"']([^\"']+)[\"']", re.IGNORECASE),
+    re.compile(r"cannot open include file [\"']([^\"']+)[\"']", re.IGNORECASE),
+    re.compile(r"no such file or directory: '([^']+)'", re.IGNORECASE),
+]
+
+
+def _missing_header_names(stderr_text: str) -> List[str]:
+    names: List[str] = []
+    for pattern in _MISSING_HEADER_PATTERNS:
+        for match in pattern.finditer(stderr_text):
+            header = match.group(1).strip()
+            if not header:
+                continue
+            if header not in names:
+                names.append(header)
+    return names
+
+
 async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) -> AnalyzeResponse:
     defaults = _ServerDefaults.load()
     executable_path = request.faial_executable or defaults.faial_executable
@@ -828,6 +852,7 @@ async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) 
         payload, parse_error = _parse_stdout(stdout_text)
         summaries = _summaries_from_payload(payload) if payload else []
         human_summary = _format_human_summary(summaries, stderr_text)
+        missing_headers = _missing_header_names(stderr_text)
 
         stdout_excerpt = _truncate_text(stdout_text)
         stderr_excerpt = _truncate_text(stderr_text)
@@ -856,6 +881,14 @@ async def _run_analysis(request: AnalyzeRequest, ctx: Optional[Context] = None) 
                 await ctx.info(f"Summary:\n{human_summary}")
             if parse_error:
                 await ctx.warning(parse_error)
+            if missing_headers:
+                formatted = ", ".join(sorted(missing_headers))
+                guidance = (
+                    "Header(s) {headers} were requested but not provided. "
+                    "Analyze requests run on the inline `source` only; include the header contents "
+                    "or supply `include_dirs`/`working_directory` pointing to those files."
+                ).format(headers=formatted)
+                await ctx.warning(guidance)
             if timed_out:
                 await ctx.error("Faial command timed out; results may be incomplete.")
 
