@@ -73,6 +73,8 @@ __global__ void convolutionRowsKernel(
         s_Data[threadIdx.y][threadIdx.x + i * ROWS_BLOCKDIM_X] = (imageW - baseX > i * ROWS_BLOCKDIM_X) ? d_Src[i * ROWS_BLOCKDIM_X] : 0;
     }
 
+    __syncthreads();
+
     //Compute and store results
 #pragma unroll
 

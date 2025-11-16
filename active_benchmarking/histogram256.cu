@@ -4,7 +4,7 @@
 
 #include "common.h"
 
-#define USE_SMEM_ATOMICS 0
+#define USE_SMEM_ATOMICS 1
 
 #if(!USE_SMEM_ATOMICS)
 #define TAG_MASK ( (1U << (UINT_BITS - LOG2_WARP_SIZE)) - 1U )
@@ -40,6 +40,9 @@ __device__ static __attribute__((always_inline)) void addWord(uint *s_WarpHist, 
 
 __global__ void histogram256Kernel(uint *d_PartialHistograms, uint *d_Data, uint dataCount)
 {
+    __assume(threadIdx.x >= 0 && threadIdx.x < HISTOGRAM256_THREADBLOCK_SIZE);
+    __assume(threadIdx.y >= 0 && threadIdx.y < 1);  // 1D block
+    __assume(threadIdx.z >= 0 && threadIdx.z < 1);  // 1D block
     //Per-warp subhistogram storage
     __shared__ uint s_Hist[HISTOGRAM256_THREADBLOCK_MEMORY];
     uint *s_WarpHist= s_Hist + (threadIdx.x >> LOG2_WARP_SIZE) * HISTOGRAM256_BIN_COUNT;
@@ -55,8 +58,6 @@ __global__ void histogram256Kernel(uint *d_PartialHistograms, uint *d_Data, uint
         s_Hist[threadIdx.x + i * HISTOGRAM256_THREADBLOCK_SIZE] = 0;
     }
 
-    __syncthreads();
-
     //Cycle through the entire data set, update subhistograms for each warp
     const uint tag = threadIdx.x << (UINT_BITS - LOG2_WARP_SIZE);
 
@@ -68,6 +69,7 @@ __global__ void histogram256Kernel(uint *d_PartialHistograms, uint *d_Data, uint
     }
 
     //Merge per-warp histograms into per-block and write to global memory
+    __syncthreads();
 
     for (uint bin = threadIdx.x;
          __global_invariant(bin % blockDim.x == threadIdx.x),

@@ -48,8 +48,6 @@ __global__ void convolution(float* I, const float* __restrict__ M, float* P,
     else
       tmp[destinationY][destinationX] = 0;
 
-    __syncthreads();
-
     unsigned int destinationY2, destinationX2;
     destination = threadIdx.y * TILE_WIDTH + threadIdx.x + TILE_WIDTH * TILE_WIDTH;
     setIndexes(destination,
@@ -63,8 +61,6 @@ __global__ void convolution(float* I, const float* __restrict__ M, float* P,
         tmp[destinationY2][destinationX2] = I[source];
       else
         tmp[destinationY2][destinationX2] = 0;
-
-    __syncthreads();
 
     acc = 0;
     #pragma unroll

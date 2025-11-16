@@ -1,3 +1,4 @@
+// Difficulty: 5
 //pass
 //--gridDim=64 --blockDim=256 --warp-sync=32
 
@@ -23,7 +24,8 @@ reduce5(T *g_idata, T *g_odata, unsigned int n)
         mySum += g_idata[i+blockSize];
 
     sdata[tid] = mySum;
-    // __syncthreads(); // DATA RACE: Missing syncthreads causes threads to read uninitialized shared memory in reduction loop
+
+    __syncthreads();
 
     // do reduction in shared mem
     if (blockSize >= 512)
@@ -61,38 +63,17 @@ reduce5(T *g_idata, T *g_odata, unsigned int n)
         // now that we are using warp-synchronous programming (below)
         // we need to declare our shared memory volatile so that the compiler
         // doesn't reorder stores to it and induce incorrect behavior.
-        T *smem = sdata;
+        volatile T *smem = sdata;
 
-        if (blockSize >=  64)
-        {
-            smem[tid] = mySum = mySum + smem[tid + 32];
-        }
-
-        if (blockSize >=  32)
-        {
-            smem[tid] = mySum = mySum + smem[tid + 16];
-        }
-
-        if (blockSize >=  16)
-        {
-            smem[tid] = mySum = mySum + smem[tid +  8];
-        }
-
-        if (blockSize >=   8)
-        {
-            smem[tid] = mySum = mySum + smem[tid +  4];
-        }
-
-        if (blockSize >=   4)
-        {
-            smem[tid] = mySum = mySum + smem[tid +  2];
-        }
-
-        if (blockSize >=   2)
-        {
-            smem[tid] = mySum = mySum + smem[tid +  1];
-        }
+        smem[tid] = mySum = mySum + ((blockSize >=  64) ? smem[tid + 32] : 0);
+        smem[tid] = mySum = mySum + ((blockSize >=  32) ? smem[tid + 16] : 0);
+        smem[tid] = mySum = mySum + ((blockSize >=  16) ? smem[tid +  8] : 0);
+        smem[tid] = mySum = mySum + ((blockSize >=   8) ? smem[tid +  4] : 0);
+        smem[tid] = mySum = mySum + ((blockSize >=   4) ? smem[tid +  2] : 0);
+        smem[tid] = mySum = mySum + ((blockSize >=   2) ? smem[tid +  1] : 0);
     }
+
+    // __syncthreads(); // BUGINJECT: DATA_RACE
 
     // write result for this block to global mem
     if (tid == 0) g_odata[blockIdx.x] = sdata[0];

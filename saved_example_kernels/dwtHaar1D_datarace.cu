@@ -28,7 +28,7 @@ dwtHaar1D(float *id, float *od, float *approx_final,
     // read data from global memory
     shared[tid] = id[idata];
     shared[tid + bdim] = id[idata + bdim];
-    // __syncthreads(); // DATA RACE: Missing syncthreads allows threads to read from shared memory before all data is loaded
+    __syncthreads();
 
     // this operation has a two way bank conflicts for all threads, this are two
     // additional cycles for each warp -- all alternatives to avoid this bank
@@ -51,7 +51,7 @@ dwtHaar1D(float *id, float *od, float *approx_final,
 
     // all threads have to write approximation coefficient to shared memory before
     // next steps can take place
-    __syncthreads();
+    //__syncthreads(); // <--- comment to trigger BUG
 
     // early out if possible
     // the compiler removes this part from the source because dlevels is
@@ -90,8 +90,11 @@ dwtHaar1D(float *id, float *od, float *approx_final,
             // non-coalesced access is rather small and does not justify the
             // computations which are necessary to avoid these uncoalesced writes
             // (this has been tested and verified)
-            if (tid < num_threads)
-            {
+        if (tid < num_threads)
+        {
+            __assume(num_threads == (bdim >> i));
+            __assume(offset_neighbor == (1u << (i - 1)));
+            __assume(idata0 == (tid << i));
                 // update stride, with each decomposition level the stride grows by a
                 // factor of 2
                 unsigned int idata1 = idata0 + offset_neighbor;

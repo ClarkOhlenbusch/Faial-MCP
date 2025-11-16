@@ -1,3 +1,4 @@
+// Difficulty: 5
 //pass
 //--gridDim=240              --blockDim=192
 
@@ -39,6 +40,9 @@ __device__ static __attribute__((always_inline)) void addWord(uint *s_WarpHist, 
 
 __global__ void histogram256Kernel(uint *d_PartialHistograms, uint *d_Data, uint dataCount)
 {
+    __assume(threadIdx.x >= 0 && threadIdx.x < HISTOGRAM256_THREADBLOCK_SIZE);
+    __assume(threadIdx.y >= 0 && threadIdx.y < 1);  // 1D block
+    __assume(threadIdx.z >= 0 && threadIdx.z < 1);  // 1D block
     //Per-warp subhistogram storage
     __shared__ uint s_Hist[HISTOGRAM256_THREADBLOCK_MEMORY];
     uint *s_WarpHist= s_Hist + (threadIdx.x >> LOG2_WARP_SIZE) * HISTOGRAM256_BIN_COUNT;
@@ -54,10 +58,11 @@ __global__ void histogram256Kernel(uint *d_PartialHistograms, uint *d_Data, uint
         s_Hist[threadIdx.x + i * HISTOGRAM256_THREADBLOCK_SIZE] = 0;
     }
 
+    // __syncthreads(); // <--- comment to trigger BUG
+
     //Cycle through the entire data set, update subhistograms for each warp
     const uint tag = threadIdx.x << (UINT_BITS - LOG2_WARP_SIZE);
 
-    // __syncthreads(); // DATA RACE: Missing syncthreads allows threads to start reading shared memory before all threads finish clearing it
 
     for (uint pos = UMAD(blockIdx.x, blockDim.x, threadIdx.x); pos < dataCount; pos += UMUL(blockDim.x, gridDim.x))
     {

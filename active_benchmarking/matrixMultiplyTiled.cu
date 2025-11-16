@@ -47,7 +47,6 @@ __global__ void matrixMultiplyTiled(float * A, float * B, float * C,
     else
       ds_B[ty][tx] = 0;
 
-    __syncthreads();
     #pragma unroll
     for (int k = 0; k < TILE_WIDTH; ++k) acc += ds_A[ty][k] * ds_B[k][tx];
     __syncthreads();
