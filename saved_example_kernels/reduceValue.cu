@@ -12,8 +12,9 @@ inline __device__ float3 trimTo3(float4 v) {
  */
 __device__ float reduceValue(float value, volatile float* temp) {
     const int thread = threadIdx.x;
+    //__syncthreads(); // <-- uncomment to trigger BUG
     temp[thread] = value;
-    // __syncthreads(); bug injection here
+    __syncthreads();
     for (uint step = 1; step < 32; step *= 2) {
         if (thread+step < blockDim.x && thread%(2*step) == 0)
             temp[thread] = temp[thread] + temp[thread+step];
